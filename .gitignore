@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Environment & secrets (never push API keys!)
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+*.env
+
+# OS files
+.DS_Store
+.DS_Store?
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs & cache
+*.log
+npm-debug.log*
+.cache/
+.parcel-cache/
+dist/
+build/
+
+# Optional: local overrides (if you use them later)
+*.local
+config.local.*
