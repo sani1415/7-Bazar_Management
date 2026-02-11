@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>বাজার ম্যানেজমেন্ট - Improved Mockup</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛒</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <!-- Supabase Client Library (must load before app.js) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <div class="container">
+        <div class="header header-with-toggle">
+            <div class="header-title-wrap">
+                <h1>🛒 বাজার ম্যানেজমেন্ট সিস্টেম</h1>
+                <p class="header-subtitle">Improved Mockup - Excel Style Entry</p>
+            </div>
+            <div class="view-toggle" role="switch" aria-label="বাজারকারী বা অ্যাডমিন ভিউ">
+                <button type="button" class="view-toggle-btn active" id="toggle-worker" onclick="switchView('worker')">বাজারকারী</button>
+                <button type="button" class="view-toggle-btn" id="toggle-admin" onclick="switchView('admin')">অ্যাডমিন</button>
+            </div>
+        </div>
+
+        <!-- বাজারকারীর ভিউ -->
+        <div id="worker-view" class="view active">
+            <!-- Worker dashboard (বাজারকারীর ড্যাশবোর্ড) -->
+            <div class="worker-dashboard">
+                <div class="worker-stats-grid stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" id="worker-stat-count">০</div>
+                        <div class="stat-label">এই মাসে এন্ট্রি</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="worker-stat-total">৳ ০</div>
+                        <div class="stat-label">এই মাসে মোট খরচ</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="worker-stat-balance">৳ ০</div>
+                        <div class="stat-label" id="worker-stat-balance-label">হাতে টাকা</div>
+                    </div>
+                </div>
+                <div class="card worker-recent-card">
+                    <div class="card-title">সাম্প্রতিক এন্ট্রি</div>
+                    <div class="worker-recent-table-wrap">
+                        <table class="table table-entries">
+                            <thead>
+                                <tr>
+                                    <th>তারিখ</th>
+                                    <th>মোট খরচ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="worker-recent-tbody">
+                                <tr><td colspan="2" style="text-align:center;color:#6b7280;padding:10px;">লোড হচ্ছে...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Worker tabs: নতুন এন্ট্রি | সব এন্ট্রি | লগ -->
+            <div class="worker-tabs">
+                <button type="button" class="worker-tab-btn active" data-worker-tab="new" onclick="switchWorkerTab('new')">নতুন এন্ট্রি</button>
+                <button type="button" class="worker-tab-btn" data-worker-tab="list" onclick="switchWorkerTab('list')">সব এন্ট্রি</button>
+                <button type="button" class="worker-tab-btn" data-worker-tab="log" onclick="switchWorkerTab('log')">লগ</button>
+            </div>
+
+            <div id="worker-panel-new" class="worker-tab-panel active">
+            <div class="card">
+                <div class="card-title">নতুন বাজার এন্ট্রি</div>
+
+                <div class="form-group">
+                    <label>তারিখ</label>
+                    <input type="date" id="entry-date" value="">
+                </div>
+
+                <div class="form-group">
+                    <label>দ্রুত নির্বাচন করুন (Common Items)</label>
+                    <div class="quick-items">
+                        <div class="quick-item" onclick="addQuickItem('🍚 চাল')">🍚 চাল</div>
+                        <div class="quick-item" onclick="addQuickItem('🫘 ডাল')">🫘 ডাল</div>
+                        <div class="quick-item" onclick="addQuickItem('🛢️ তেল')">🛢️ তেল</div>
+                        <div class="quick-item" onclick="addQuickItem('🧅 পেঁয়াজ')">🧅 পেঁয়াজ</div>
+                        <div class="quick-item" onclick="addQuickItem('🧄 রসুন')">🧄 রসুন</div>
+                        <div class="quick-item" onclick="addQuickItem('🥔 আলু')">🥔 আলু</div>
+                        <div class="quick-item" onclick="addQuickItem('🌶️ মরিচ')">🌶️ মরিচ</div>
+                        <div class="quick-item" onclick="addQuickItem('🐟 মাছ')">🐟 মাছ</div>
+                        <div class="quick-item" onclick="addQuickItem('🍗 মুরগি')">🍗 মুরগি</div>
+                        <div class="quick-item" onclick="addQuickItem('🥚 ডিম')">🥚 ডিম</div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>আইটেম তালিকা (Excel Style)</label>
+                    <div class="excel-table-container">
+                        <table class="excel-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 20%;">আইটেমের নাম</th>
+                                    <th style="width: 10%;">পরিমাণ</th>
+                                    <th style="width: 10%;">একক</th>
+                                    <th style="width: 12%;">প্রতি একক দাম</th>
+                                    <th style="width: 12%;">মোট দাম</th>
+                                    <th style="width: 12%;">ক্যাটাগরি</th>
+                                    <th style="width: 12%;">মেমো ছবি</th>
+                                    <th style="width: 6%;">মুছুন</th>
+                                </tr>
+                            </thead>
+                            <tbody id="items-tbody">
+                                <tr>
+                                    <td>
+                                        <input type="text" class="item-name" placeholder="আইটেম লিখুন..." oninput="calculateRow(this)">
+                                    </td>
+                                    <td>
+                                        <input type="number" class="item-quantity" value="0" step="0.1" min="0" oninput="calculateRow(this)">
+                                    </td>
+                                    <td>
+                                        <select class="item-unit" onchange="calculateRow(this)">
+                                            <option>কেজি</option>
+                                            <option>পিস</option>
+                                            <option>লিটার</option>
+                                            <option>গ্রাম</option>
+                                            <option>হালি</option>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <input type="number" class="item-price" value="0" step="0.01" min="0" oninput="calculateRow(this)">
+                                    </td>
+                                    <td class="calc-cell item-total">০ টাকা</td>
+                                    <td>
+                                        <select class="item-category">
+                                            <option>মুদি</option>
+                                            <option>সবজি</option>
+                                            <option>মাছ-মাংস</option>
+                                            <option>ফলমূল</option>
+                                            <option>অন্যান্য</option>
+                                        </select>
+                                    </td>
+                                    <td class="memo-cell">
+                                        <input type="file" class="item-memo-file" accept="image/*" hidden onchange="previewMemoImage(this)">
+                                        <button type="button" class="memo-upload-btn" onclick="this.previousElementSibling.click()" title="এই আইটেমের মেমো ছবি">📷</button>
+                                        <span class="memo-has-pic" style="display:none;">✓</span>
+                                        <img class="memo-preview" alt="" style="display:none; max-width:32px; max-height:32px; border-radius:4px; vertical-align:middle;">
+                                    </td>
+                                    <td style="text-align: center;">
+                                        <button class="delete-btn" onclick="deleteRow(this)">✕</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <button class="add-row-btn" onclick="addNewRow()">+ নতুন সারি যোগ করুন</button>
+                </div>
+
+                <div class="form-group">
+                    <label>মন্তব্য (Optional)</label>
+                    <textarea id="entry-comment" rows="2" placeholder="যেমন: আজ বাজার ভালো ছিল, দাম একটু বেশি ছিল"></textarea>
+                </div>
+
+                <div class="summary-box">
+                    <div class="summary-row">
+                        <span>মোট আইটেম:</span>
+                        <span id="total-items" style="font-weight: 600;">০টি</span>
+                    </div>
+                    <div class="summary-row">
+                        <span>সর্বমোট খরচ:</span>
+                        <span id="total-cost" class="summary-total">০ টাকা</span>
+                    </div>
+                </div>
+
+                <button class="btn btn-success" id="save-entry-btn" style="width: 100%; margin-top: 20px; padding: 15px; font-size: 18px;" onclick="saveEntry()">
+                    ✓ এন্ট্রি সেভ করুন
+                </button>
+            </div>
+            </div>
+
+            <div id="worker-panel-list" class="worker-tab-panel">
+            <div class="card">
+                <div class="card-title">সব বাজার এন্ট্রি</div>
+                <div class="worker-recent-table-wrap">
+                    <table class="table table-entries">
+                        <thead>
+                            <tr>
+                                <th>তারিখ</th>
+                                <th>আইটেম সংখ্যা</th>
+                                <th>মোট খরচ</th>
+                                <th>অ্যাকশন</th>
+                            </tr>
+                        </thead>
+                        <tbody id="worker-entries-tbody">
+                            <tr><td colspan="4" style="text-align:center;color:#6b7280;padding:10px;">লোড হচ্ছে...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            </div>
+
+            <div id="worker-panel-log" class="worker-tab-panel">
+            <div class="card">
+                <div class="card-title">পরিবর্তনের ইতিহাস (এডিট লগ)</div>
+                <p style="margin-bottom:10px; font-size: 13px; color: var(--text-muted, #6b7280);">প্রতিটি এন্ট্রি এডিটের রেকর্ড নিচে দেখানো হয়েছে।</p>
+                <div class="worker-recent-table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>এন্ট্রি তারিখ</th>
+                                <th>এডিটের সময়</th>
+                                <th>আগের মোট</th>
+                                <th>নতুন মোট</th>
+                            </tr>
+                        </thead>
+                        <tbody id="worker-log-tbody">
+                            <tr><td colspan="4" style="text-align:center;color:#6b7280;padding:12px;">কোনো এডিট রেকর্ড নেই</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            </div>
+        </div>
+
+        <!-- অ্যাডমিন ভিউ -->
+        <div id="admin-view" class="view">
+            <!-- Dashboard (always visible, like worker) -->
+            <div class="balance-card">
+                <div class="balance-card-header">
+                    <span class="balance-card-title" id="balance-label">বাজারকারীর হাতে টাকা</span>
+                    <span class="balance-card-update">শেষ আপডেট: আজ, ১০:৩০ AM</span>
+                </div>
+                <div class="balance-amount" id="balance-amount">৳ ০</div>
+                <div class="action-buttons">
+                    <button class="btn btn-primary balance-btn" type="button" onclick="openAddMoney()">+ টাকা দিন</button>
+                    <button class="btn btn-secondary balance-btn" type="button" onclick="openBalanceStatement()">হিসাব দেখুন</button>
+                </div>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value">৳ ১২,৩৪৫</div>
+                    <div class="stat-label">এই মাসের মোট খরচ</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">২৮</div>
+                    <div class="stat-label">মোট বাজার এন্ট্রি</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value">৳ ৪৪১</div>
+                    <div class="stat-label">গড় দৈনিক খরচ</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-hand-balance">৳ ০</div>
+                    <div class="stat-label" id="stat-hand-label">বাজারকারীর হাতে টাকা</div>
+                </div>
+            </div>
+
+            <!-- Admin tabs under dashboard: সব এন্ট্রি | লগ -->
+            <div class="admin-tabs worker-tabs">
+                <button type="button" class="admin-tab-btn worker-tab-btn active" data-admin-tab="entries" onclick="switchAdminTab('entries')">সব এন্ট্রি</button>
+                <button type="button" class="admin-tab-btn worker-tab-btn" data-admin-tab="log" onclick="switchAdminTab('log')">লগ</button>
+            </div>
+
+            <div id="admin-panel-entries" class="admin-tab-panel worker-tab-panel active">
+                <!-- Filters -->
+                <div class="card">
+                    <div class="card-title">ফিল্টার ও সার্চ</div>
+                    <div class="filter-bar">
+                        <select id="admin-filter-date" onchange="applyAdminDateFilterVisibility(); loadAdminData();">
+                            <option value="this_month">এই মাস</option>
+                            <option value="last_month">গত মাস</option>
+                            <option value="this_week">এই সপ্তাহ</option>
+                            <option value="today">আজ</option>
+                            <option value="custom">কাস্টম রেঞ্জ</option>
+                        </select>
+                        <span id="admin-custom-dates-wrap" style="display:none;">
+                            <input type="date" id="admin-date-from" title="শুরুর তারিখ">
+                            <input type="date" id="admin-date-to" title="শেষ তারিখ">
+                        </span>
+                        <select id="admin-filter-category" onchange="loadAdminData()">
+                            <option value="">সব ক্যাটাগরি</option>
+                            <option value="মুদি">মুদি</option>
+                            <option value="সবজি">সবজি</option>
+                            <option value="মাছ-মাংস">মাছ-মাংস</option>
+                            <option value="ফলমূল">ফলমূল</option>
+                            <option value="অন্যান্য">অন্যান্য</option>
+                        </select>
+                        <input type="text" id="admin-filter-search" placeholder="আইটেম বা মন্তব্য সার্চ..." onkeypress="if(event.key==='Enter') loadAdminData();">
+                        <button type="button" class="btn btn-primary" onclick="loadAdminData()">🔍 প্রয়োগ করুন</button>
+                    </div>
+                </div>
+                <!-- Recent Entries -->
+                <div class="card">
+                    <div class="card-title">সাম্প্রতিক বাজার এন্ট্রি</div>
+                    <table class="table table-entries">
+                        <thead>
+                            <tr>
+                                <th>তারিখ</th>
+                                <th>আইটেম সংখ্যা</th>
+                                <th>মোট খরচ</th>
+                                <th>অ্যাকশন</th>
+                            </tr>
+                        </thead>
+                        <tbody id="entries-tbody">
+                            <tr><td colspan="4" style="text-align: center; padding: 20px; color: #6b7280;">লোড হচ্ছে...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <!-- Item Summary -->
+                <div class="card">
+                    <div class="card-title">এই মাসে সবচেয়ে বেশি কেনা</div>
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>আইটেম</th>
+                                <th>মোট পরিমাণ</th>
+                                <th>মোট খরচ</th>
+                                <th>গড় দাম</th>
+                            </tr>
+                        </thead>
+                        <tbody id="top-items-tbody">
+                            <tr><td colspan="4" style="text-align: center; padding: 20px; color: #6b7280;">কোনো ডেটা নেই</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="admin-panel-log" class="admin-tab-panel worker-tab-panel">
+                <div class="card">
+                    <div class="card-title">পরিবর্তনের ইতিহাস (এডিট লগ)</div>
+                    <p style="margin-bottom:10px; font-size: 13px; color: var(--text-muted, #6b7280);">প্রতিটি এন্ট্রি এডিটের রেকর্ড নিচে দেখানো হয়েছে।</p>
+                    <div class="worker-recent-table-wrap">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>এন্ট্রি তারিখ</th>
+                                    <th>এডিটের সময়</th>
+                                    <th>আগের মোট</th>
+                                    <th>নতুন মোট</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-log-tbody">
+                                <tr><td colspan="4" style="text-align:center;color:#6b7280;padding:12px;">কোনো এডিট রেকর্ড নেই</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Entry details modal (per-item memo indicator) -->
+    <div id="details-modal-overlay" class="details-modal-overlay" onclick="if(event.target===this) closeDetailsModal()">
+        <div class="details-modal">
+            <div class="details-modal-header">
+                <span>এন্ট্রি বিস্তারিত</span>
+                <button type="button" onclick="closeDetailsModal()" style="background:transparent;border:none;color:white;font-size:20px;cursor:pointer;">×</button>
+            </div>
+            <div class="details-modal-body" id="details-modal-body"></div>
+        </div>
+    </div>
+
+    <!-- Memo image viewer popup -->
+    <div id="memo-viewer-overlay" class="memo-viewer-overlay" onclick="if(event.target===this) closeMemoViewer()">
+        <div class="memo-viewer-box">
+            <button type="button" class="memo-viewer-close" onclick="closeMemoViewer()" aria-label="বন্ধ">×</button>
+            <img id="memo-viewer-img" src="" alt="মেমো ছবি">
+        </div>
+    </div>
+
+    <!-- Balance statement modal (হিসাব দেখুন) -->
+    <div id="balance-statement-overlay" class="details-modal-overlay" onclick="if(event.target===this) closeBalanceStatement()">
+        <div class="details-modal">
+            <div class="details-modal-header">
+                <span>হিসাব</span>
+                <button type="button" onclick="closeBalanceStatement()" style="background:transparent;border:none;color:white;font-size:20px;cursor:pointer;" aria-label="বন্ধ">×</button>
+            </div>
+            <div class="details-modal-body" id="balance-statement-body"></div>
+        </div>
+    </div>
+
+    <!-- Edit entry modal -->
+    <div id="edit-entry-overlay" class="details-modal-overlay" onclick="if(event.target===this) closeEditEntryModal()">
+        <div class="details-modal" style="max-width: 96%;">
+            <div class="details-modal-header">
+                <span>এন্ট্রি এডিট করুন</span>
+                <button type="button" onclick="closeEditEntryModal()" style="background:transparent;border:none;color:white;font-size:20px;cursor:pointer;">×</button>
+            </div>
+            <div class="details-modal-body">
+                <input type="hidden" id="edit-entry-id" value="">
+                <div class="form-group">
+                    <label>তারিখ</label>
+                    <input type="date" id="edit-entry-date" value="">
+                </div>
+                <div class="form-group">
+                    <label>আইটেম তালিকা</label>
+                    <div class="excel-table-container">
+                        <table class="excel-table">
+                            <thead>
+                                <tr>
+                                    <th>আইটেমের নাম</th>
+                                    <th>পরিমাণ</th>
+                                    <th>একক</th>
+                                    <th>প্রতি একক দাম</th>
+                                    <th>মোট দাম</th>
+                                    <th>ক্যাটাগরি</th>
+                                    <th>মেমো</th>
+                                    <th>মুছুন</th>
+                                </tr>
+                            </thead>
+                            <tbody id="edit-items-tbody"></tbody>
+                        </table>
+                    </div>
+                    <button type="button" class="add-row-btn" onclick="addEditRow()">+ সারি যোগ করুন</button>
+                </div>
+                <div class="form-group">
+                    <label>মন্তব্য</label>
+                    <textarea id="edit-entry-comment" rows="2"></textarea>
+                </div>
+                <p style="margin-bottom:8px;"><strong>মোট খরচ:</strong> <span id="edit-summary-total">০ টাকা</span></p>
+                <div class="action-buttons" style="margin-top:12px;">
+                    <button type="button" class="btn btn-success" onclick="saveEditedEntry()">সেভ করুন</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeEditEntryModal()">বাতিল</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit log modal (পরিবর্তনের ইতিহাস) -->
+    <div id="edit-log-overlay" class="details-modal-overlay" onclick="if(event.target===this) closeEditLogModal()">
+        <div class="details-modal">
+            <div class="details-modal-header">
+                <span>পরিবর্তনের ইতিহাস (এডিট লগ)</span>
+                <button type="button" onclick="closeEditLogModal()" style="background:transparent;border:none;color:white;font-size:20px;cursor:pointer;">×</button>
+            </div>
+            <div class="details-modal-body">
+                <p style="margin-bottom:10px; font-size: 13px; color: var(--text-muted, #6b7280);">প্রতিটি এন্ট্রি এডিটের রেকর্ড নিচে দেখানো হয়েছে।</p>
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>এন্ট্রি তারিখ</th>
+                            <th>এডিটের সময়</th>
+                            <th>আগের মোট</th>
+                            <th>নতুন মোট</th>
+                        </tr>
+                    </thead>
+                    <tbody id="edit-log-tbody">
+                        <tr><td colspan="4" style="text-align:center;color:#6b7280;padding:12px;">কোনো এডিট রেকর্ড নেই</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

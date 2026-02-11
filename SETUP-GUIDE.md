@@ -32,9 +32,9 @@ Your HTML file already has your Supabase credentials configured:
 - URL: `https://vdzpvgmgjbbdezqbovrk.supabase.co`
 - Key: Already set in the code
 
-### Step 3: Open Your HTML File
+### Step 3: Open the App
 
-1. Simply open `grocery-app-improved-mockup.html` in your web browser
+1. Open **`index.html`** in your web browser (same folder must contain `styles.css` and `app.js`).
 2. The app should work immediately!
 
 ## Features Now Working
@@ -74,6 +74,17 @@ Your HTML file already has your Supabase credentials configured:
 
 3. **Verify Credentials**
    - Make sure Supabase URL and key are correct in the HTML file
+
+## Storage: LocalStorage vs Supabase
+
+The app can run with **localStorage** (no server) or **Supabase**. Right now it uses **localStorage** by default.
+
+- **To keep using localStorage:** Do nothing. Data is saved in your browser only.
+- **To switch to Supabase:** Open **`app.js`** in an editor, find near the top:
+  ```js
+  const USE_LOCAL_STORAGE = true;
+  ```
+  Change to `false`, save, and refresh the app. Make sure you have run the SQL schema and tables exist.
 
 ## Next Steps (Optional)
 
