@@ -134,6 +134,12 @@ body {
 .form-group {
     margin-bottom: 20px;
 }
+.bill-image-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
 
 label {
     display: block;

@@ -61,11 +61,12 @@
                 </div>
             </div>
 
-            <!-- Worker tabs: নতুন এন্ট্রি | সব এন্ট্রি | লগ -->
+            <!-- Worker tabs: নতুন এন্ট্রি | সব এন্ট্রি | লগ | বিল ইমপোর্ট -->
             <div class="worker-tabs">
                 <button type="button" class="worker-tab-btn active" data-worker-tab="new" onclick="switchWorkerTab('new')">নতুন এন্ট্রি</button>
                 <button type="button" class="worker-tab-btn" data-worker-tab="list" onclick="switchWorkerTab('list')">সব এন্ট্রি</button>
                 <button type="button" class="worker-tab-btn" data-worker-tab="log" onclick="switchWorkerTab('log')">লগ</button>
+                <button type="button" class="worker-tab-btn" data-worker-tab="import" onclick="switchWorkerTab('import')">বিল ইমপোর্ট</button>
             </div>
 
             <div id="worker-panel-new" class="worker-tab-panel active">
@@ -75,6 +76,18 @@
                 <div class="form-group">
                     <label>তারিখ</label>
                     <input type="date" id="entry-date" value="">
+                </div>
+
+                <div class="form-group">
+                    <label>বিল/চালানের ছবি (ঐচ্ছিক)</label>
+                    <div class="bill-image-wrap">
+                        <input type="file" id="entry-bill-image" accept="image/*" hidden onchange="previewBillImage(this)">
+                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('entry-bill-image').click()">বিলের ছবি নির্বাচন করুন</button>
+                        <span id="entry-bill-preview-wrap" style="display:none;">
+                            <img id="entry-bill-preview" alt="বিল" style="max-width:120px;max-height:80px;border-radius:6px;cursor:pointer;" onclick="viewBillImage()" title="বড় দেখুন">
+                            <button type="button" class="btn btn-secondary" style="margin-left:6px;" onclick="clearBillImage()">মুছুন</button>
+                        </span>
+                    </div>
                 </div>
 
                 <div class="form-group">
@@ -195,6 +208,22 @@
                         </tbody>
                     </table>
                 </div>
+            </div>
+            </div>
+
+            <div id="worker-panel-import" class="worker-tab-panel">
+            <div class="card">
+                <div class="card-title">পুরনো বিল CSV ইমপোর্ট</div>
+                <p style="margin-bottom:12px; font-size: 13px; color: var(--text-muted, #6b7280);">শত শত পুরনো বিল একসাথে যোগ করতে CSV পেস্ট বা ফাইল আপলোড করুন। একই তারিখের সব সারি একই এন্ট্রিতে যাবে। তারিখ ইংরেজি ফরম্যাটে দিন (YYYY-MM-DD), যেমন 2024-01-15।</p>
+                <div class="form-group">
+                    <label>CSV ফরম্যাট (প্রথম লাইন হেডার থাকলে সেটা বাদ দেওয়া হবে)</label>
+                    <p style="font-size:12px; margin-bottom:6px;">entry_date,item_name,quantity,unit,price_per_unit,total_price,category (total_price বা price_per_unit যেকোন একটি দিলেই হবে)</p>
+                    <p style="font-size:12px; margin-bottom:8px;">উদাহরণ: 2024-01-15,চাল,5,কেজি,70,,মুদি &nbsp;|&nbsp; 2024-01-15,মাছ,1,পিস,,450,মাছ-মাংস</p>
+                    <textarea id="csv-import-text" rows="8" placeholder="এখানে CSV পেস্ট করুন অথবা নিচে ফাইল চয়ন করুন..." style="width:100%; padding:10px; border-radius:6px; border:1px solid var(--border); font-family: inherit;"></textarea>
+                    <input type="file" id="csv-import-file" accept=".csv,.txt" style="margin-top:8px;" onchange="readCsvFile(this)">
+                </div>
+                <button type="button" class="btn btn-success" onclick="doCsvImport()">ইমপোর্ট করুন</button>
+                <p id="csv-import-result" style="margin-top:10px; font-size:13px;"></p>
             </div>
             </div>
 

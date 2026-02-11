@@ -63,26 +63,56 @@ function addMoney(amount) {
 // ---------- Edit log (পরিবর্তনের ইতিহাস) ----------
 const LS_EDIT_LOG = 'bazar_edit_log';
 
-function getEditLog() {
-    try {
-        const raw = localStorage.getItem(LS_EDIT_LOG);
-        const arr = raw ? JSON.parse(raw) : [];
-        return Array.isArray(arr) ? arr : [];
-    } catch (e) { return []; }
+async function getEditLog() {
+    if (USE_LOCAL_STORAGE) {
+        try {
+            const raw = localStorage.getItem(LS_EDIT_LOG);
+            const arr = raw ? JSON.parse(raw) : [];
+            return Array.isArray(arr) ? arr : [];
+        } catch (e) { return []; }
+    } else {
+        // Fetch from Supabase edit_log table
+        const { data, error } = await supabaseClient
+            .from('edit_log')
+            .select('*')
+            .order('edited_at', { ascending: false });
+        if (error) {
+            console.error('Error fetching edit log from Supabase:', error);
+            return [];
+        }
+        return data || [];
+    }
 }
 
-function addToEditLog(entryId, entryDate, previousTotal, newTotal) {
-    const log = getEditLog();
-    log.unshift({
-        entry_id: entryId,
-        entry_date: entryDate,
-        edited_at: new Date().toISOString(),
-        previous_total: previousTotal,
-        new_total: newTotal
-    });
-    try {
-        localStorage.setItem(LS_EDIT_LOG, JSON.stringify(log));
-    } catch (e) { /* ignore */ }
+async function addToEditLog(entryId, entryDate, previousTotal, newTotal) {
+    if (USE_LOCAL_STORAGE) {
+        const log = getEditLog(); // Note: getEditLog is now async, but we're in localStorage branch. This will still work as sync, as it returns a promise.
+        log.unshift({
+            entry_id: entryId,
+            entry_date: entryDate,
+            edited_at: new Date().toISOString(),
+            previous_total: previousTotal,
+            new_total: newTotal
+        });
+        try {
+            localStorage.setItem(LS_EDIT_LOG, JSON.stringify(log));
+        } catch (e) { /* ignore */ }
+    } else {
+        // Insert into Supabase edit_log table
+        const { error } = await supabaseClient
+            .from('edit_log')
+            .insert([{
+                entry_id: entryId,
+                entry_date: entryDate,
+                previous_total: previousTotal,
+                new_total: newTotal,
+                // edited_at defaults to NOW() in SQL
+            }]);
+        if (error) {
+            console.error('Error adding to edit log in Supabase:', error);
+            throw error; // Propagate error
+        }
+    }
 }
 
 // Balance = money you gave - total spent (all entries). Positive = he has in hand, Negative = you owe him
@@ -107,7 +137,7 @@ const localStorageAdapter = {
     _saveEntries(entries) { localStorage.setItem(LS_ENTRIES, JSON.stringify(entries)); },
     _saveItems(items) { localStorage.setItem(LS_ITEMS, JSON.stringify(items)); },
 
-    async saveEntry(entryData, items) {
+    async saveEntry(entryData, items, billFile) {
         const entries = this._getEntries();
         const allItems = this._getItems();
         const id = Date.now();
@@ -119,6 +149,7 @@ const localStorageAdapter = {
             item_count: entryData.item_count,
             comment: entryData.comment || null,
             payment_status: entryData.payment_status || 'pending',
+            bill_image_url: entryData.bill_image_url || null, // For localStorage, it's already base64
             created_at: now,
             updated_at: now
         };
@@ -240,7 +271,19 @@ const localStorageAdapter = {
 // ---------- Supabase adapter (same API) ----------
 const MEMO_BUCKET = 'memo-images';
 const supabaseAdapter = {
-    async saveEntry(entryData, items) {
+    async saveEntry(entryData, items, billFile) {
+        var billImageUrl = null;
+        if (billFile) {
+            try {
+                var ext = (billFile.name || '').split('.').pop() || 'jpg';
+                var path = `bill_images/${Date.now()}.${ext}`;
+                var { error: upErr } = await supabaseClient.storage.from(MEMO_BUCKET).upload(path, billFile, { upsert: true });
+                if (!upErr) {
+                    var { data: urlData } = supabaseClient.storage.from(MEMO_BUCKET).getPublicUrl(path);
+                    billImageUrl = urlData.publicUrl;
+                }
+            } catch (e) { console.warn('Bill file upload failed', e); }
+        }
         const { data: entryDataRes, error: entryError } = await supabaseClient
             .from('grocery_entries')
             .insert([{
@@ -248,7 +291,8 @@ const supabaseAdapter = {
                 total_cost: entryData.total_cost,
                 item_count: entryData.item_count,
                 comment: entryData.comment || null,
-                payment_status: entryData.payment_status || 'pending'
+                payment_status: entryData.payment_status || 'pending',
+                bill_image_url: billImageUrl || null
             }])
             .select();
         if (entryError) throw entryError;
@@ -286,7 +330,7 @@ const supabaseAdapter = {
     async getEntries(limit = 20) {
         const { data, error } = await supabaseClient
             .from('grocery_entries')
-            .select('*, grocery_items(memo_image_url)')
+            .select('*, grocery_items(*)')
             .order('entry_date', { ascending: false })
             .limit(limit);
         if (error) throw error;
@@ -305,7 +349,7 @@ const supabaseAdapter = {
     async getEntriesInDateRange(startDate, endDate) {
         const { data, error } = await supabaseClient
             .from('grocery_entries')
-            .select('*, grocery_items(memo_image_url)')
+            .select('*, grocery_items(*)')
             .gte('entry_date', startDate)
             .lte('entry_date', endDate)
             .order('entry_date', { ascending: false });
@@ -362,7 +406,8 @@ const supabaseAdapter = {
                 total_cost: entryData.total_cost,
                 item_count: entryData.item_count,
                 comment: entryData.comment || null,
-                updated_at: new Date().toISOString()
+                updated_at: new Date().toISOString(),
+                bill_image_url: entryData.bill_image_url || null
             })
             .eq('id', entryId);
         if (upErr) throw upErr;
@@ -656,16 +701,16 @@ function switchWorkerTab(tabName) {
     });
     document.querySelectorAll('.worker-tab-panel').forEach(function (p) {
         var id = p.id;
-        p.classList.toggle('active', (tabName === 'new' && id === 'worker-panel-new') || (tabName === 'list' && id === 'worker-panel-list') || (tabName === 'log' && id === 'worker-panel-log'));
+        p.classList.toggle('active', (tabName === 'new' && id === 'worker-panel-new') || (tabName === 'list' && id === 'worker-panel-list') || (tabName === 'log' && id === 'worker-panel-log') || (tabName === 'import' && id === 'worker-panel-import'));
     });
     if (tabName === 'list') loadWorkerEntries();
     if (tabName === 'log') renderWorkerLog();
 }
 
-function renderWorkerLog() {
+async function renderWorkerLog() {
     var tbody = document.getElementById('worker-log-tbody');
     if (!tbody) return;
-    var log = getEditLog();
+    var log = await getEditLog();
     if (log.length === 0) {
         tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#6b7280;padding:12px;">কোনো এডিট রেকর্ড নেই</td></tr>';
     } else {
@@ -723,6 +768,141 @@ function addNewRow() {
         </td>
     `;
     tbody.appendChild(row);
+}
+
+// Bill image (entry-level)
+function previewBillImage(fileInput) {
+    var wrap = document.getElementById('entry-bill-preview-wrap');
+    var img = document.getElementById('entry-bill-preview');
+    if (!fileInput.files || !fileInput.files[0]) return;
+    var r = new FileReader();
+    r.onload = function () {
+        img.src = r.result;
+        img.setAttribute('data-bill-src', r.result);
+        wrap.style.display = 'inline-block';
+    };
+    r.readAsDataURL(fileInput.files[0]);
+}
+function clearBillImage() {
+    var input = document.getElementById('entry-bill-image');
+    var wrap = document.getElementById('entry-bill-preview-wrap');
+    var img = document.getElementById('entry-bill-preview');
+    if (input) input.value = '';
+    if (img) { img.src = ''; img.removeAttribute('data-bill-src'); }
+    if (wrap) wrap.style.display = 'none';
+}
+function viewBillImage() {
+    var img = document.getElementById('entry-bill-preview');
+    var src = img && img.getAttribute('data-bill-src');
+    if (src) viewMemoImage(src);
+}
+
+// CSV import for old bills
+function readCsvFile(fileInput) {
+    if (!fileInput.files || !fileInput.files[0]) return;
+    var f = fileInput.files[0];
+    var r = new FileReader();
+    r.onload = function () {
+        var el = document.getElementById('csv-import-text');
+        if (el) el.value = r.result;
+    };
+    r.readAsText(f, 'UTF-8');
+}
+
+async function doCsvImport() {
+    var ta = document.getElementById('csv-import-text');
+    var resultEl = document.getElementById('csv-import-result');
+    if (!ta || !resultEl) return;
+    var text = (ta.value || '').trim();
+    if (!text) {
+        resultEl.textContent = 'প্রথমে CSV পেস্ট করুন বা ফাইল চয়ন করুন।';
+        return;
+    }
+    var lines = text.split(/\r?\n/).filter(function (l) { return l.trim(); });
+    if (lines.length === 0) {
+        resultEl.textContent = 'কোনো সারি নেই।';
+        return;
+    }
+    var rows = [];
+    for (var i = 0; i < lines.length; i++) {
+        var parts = lines[i].split(',').map(function (s) { return s.trim().replace(/^["']|["']$/g, ''); });
+        if (parts.length < 5) continue; // Minimum 5 columns: date, name, qty, unit, price/unit or total_price
+
+        var entryDate = parts[0];
+        var itemName = parts[1];
+        var quantity = parseFloat(parts[2]) || 0;
+        var unit = (parts[3] || 'কেজি').trim() || 'কেজি';
+        var pricePerUnit = parseFloat(parts[4]) || 0;
+        var totalPriceFromFile = parseFloat(parts[5]) || 0; // New: optional total_price from CSV
+        var category = (parts[6] || 'অন্যান্য').trim() || 'অন্যান্য'; // Category is now 7th column
+
+        // Skip header lines (if any) based on content
+        if (entryDate.toLowerCase().indexOf('date') >= 0 || itemName.toLowerCase().indexOf('name') >= 0) continue;
+        if (!itemName) continue;
+
+        var total, price;
+        if (pricePerUnit > 0) {
+            // If price_per_unit is provided, calculate total from it (priority)
+            total = quantity * pricePerUnit;
+            price = pricePerUnit;
+        } else if (totalPriceFromFile > 0) {
+            // If price_per_unit is not provided, but total_price is given
+            total = totalPriceFromFile;
+            price = quantity > 0 ? totalPriceFromFile / quantity : totalPriceFromFile; // If qty 0, per unit is total
+        } else {
+            // Neither price_per_unit nor total_price provided
+            total = 0;
+            price = 0;
+        }
+
+        rows.push({ entry_date: entryDate, item_name: itemName, quantity: quantity, unit: unit, price_per_unit: price, total_price: total, category: category });
+    }
+    if (rows.length === 0) {
+        resultEl.textContent = 'সঠিক ফরম্যাটের কোনো সারি পাওয়া যায়নি। ফরম্যাট: entry_date,item_name,quantity,unit,price_per_unit,category';
+        return;
+    }
+    var byDate = {};
+    rows.forEach(function (r) {
+        if (!byDate[r.entry_date]) byDate[r.entry_date] = [];
+        byDate[r.entry_date].push(r);
+    });
+    var dates = Object.keys(byDate).sort();
+    var maxEntries = 100;
+    if (dates.length > maxEntries) {
+        resultEl.textContent = 'একবারে সর্বোচ্চ ' + maxEntries + 'টি এন্ট্রি ইমপোর্ট করা যাবে। আপনার ' + dates.length + 'টি তারিখ আছে। প্রথম ' + maxEntries + 'টি নেওয়া হবে।';
+        dates = dates.slice(0, maxEntries);
+    }
+    resultEl.textContent = 'ইমপোর্ট করা হচ্ছে...';
+    var done = 0, err = 0;
+    for (var d = 0; d < dates.length; d++) {
+        var date = dates[d];
+        var dateRows = byDate[date];
+        var items = dateRows.map(function (r) {
+            return { name: r.item_name, quantity: r.quantity, unit: r.unit, price_per_unit: r.price_per_unit, total_price: r.total_price, category: r.category, memo_image_url: null };
+        });
+        var totalCost = items.reduce(function (s, it) { return s + it.total_price; }, 0);
+        try {
+            await storage.saveEntry({
+                entry_date: date,
+                total_cost: totalCost,
+                item_count: items.length,
+                comment: null,
+                payment_status: 'pending',
+                bill_image_url: null
+            }, items);
+            done++;
+        } catch (e) {
+            err++;
+            console.error('Import error for ' + date, e);
+        }
+    }
+    resultEl.textContent = 'সম্পন্ন: ' + done + 'টি এন্ট্রি যোগ হয়েছে।' + (err ? ' ত্রুটি: ' + err + 'টি।' : '');
+    ta.value = '';
+    document.getElementById('csv-import-file').value = '';
+    loadWorkerDashboard();
+    loadWorkerEntries();
+    if (document.getElementById('admin-view').classList.contains('active')) loadAdminData();
+    updateBalanceUI();
 }
 
 // Show preview when user selects a memo image for an item
@@ -880,6 +1060,24 @@ async function saveEntry() {
     }
 
     const totalCost = items.reduce((sum, item) => sum + item.total_price, 0);
+    var billFile = null;
+    var billImageUrlForLocalStorage = null;
+
+    var billInput = document.getElementById('entry-bill-image');
+    if (billInput && billInput.files && billInput.files[0]) {
+        billFile = billInput.files[0];
+        if (USE_LOCAL_STORAGE) {
+            try {
+                billImageUrlForLocalStorage = await new Promise(function (res, rej) {
+                    var r = new FileReader();
+                    r.onload = function () { res(r.result); };
+                    r.onerror = rej;
+                    r.readAsDataURL(billFile);
+                });
+            } catch (e) { console.warn('Bill image read failed for local storage', e); }
+        }
+    }
+
     const saveBtn = document.getElementById('save-entry-btn');
     saveBtn.disabled = true;
     saveBtn.textContent = 'সেভ হচ্ছে...';
@@ -890,10 +1088,14 @@ async function saveEntry() {
             total_cost: totalCost,
             item_count: items.length,
             comment: comment || null,
-            payment_status: 'pending'
-        }, items);
+            payment_status: 'pending',
+            bill_image_url: billImageUrlForLocalStorage // For localStorage, pass base64
+        }, items, billFile); // Pass raw file for Supabase to upload
 
         alert('✅ এন্ট্রি সফলভাবে সেভ হয়েছে!');
+
+        alert('✅ এন্ট্রি সফলভাবে সেভ হয়েছে!');
+        clearBillImage();
         updateBalanceUI();
         loadWorkerDashboard();
         document.getElementById('entry-date').value = new Date().toISOString().split('T')[0];
@@ -1121,7 +1323,11 @@ async function togglePayment(entryId, currentStatus) {
 async function viewDetails(entryId) {
     try {
         const { entry, items } = await storage.getEntryById(entryId);
-        let html = '<p style="margin-bottom:12px;"><strong>তারিখ:</strong> ' + formatDate(entry.entry_date) + '</p>';
+        let html = '';
+        if (entry.bill_image_url) {
+            html += '<p style="margin-bottom:12px;"><strong>বিলের ছবি:</strong> <span role="button" class="memo-thumb-wrap" data-memo-src="' + escapeHtmlAttr(entry.bill_image_url) + '" onclick="viewMemoImage(this.getAttribute(\'data-memo-src\'))" title="বিলের ছবি বড় দেখুন"><img class="item-memo-thumb" src="' + escapeHtmlAttr(entry.bill_image_url) + '" alt="বিল" style="max-width:160px;max-height:120px;"></span></p>';
+        }
+        html += '<p style="margin-bottom:12px;"><strong>তারিখ:</strong> ' + formatDate(entry.entry_date) + '</p>';
         html += '<p style="margin-bottom:12px;"><strong>মোট খরচ:</strong> ৳ ' + Number(entry.total_cost).toLocaleString('bn-BD') + '</p>';
         if (entry.comment) html += '<p style="margin-bottom:12px;"><strong>মন্তব্য:</strong> ' + (entry.comment || '') + '</p>';
         html += '<table class="table"><thead><tr><th>আইটেম</th><th>পরিমাণ</th><th>দাম</th><th>মোট</th><th>মেমো</th></tr></thead><tbody>';
@@ -1279,9 +1485,10 @@ async function saveEditedEntry() {
             total_cost: newTotal,
             item_count: items.length,
             comment: comment,
-            payment_status: prev.entry.payment_status || 'pending'
+            payment_status: prev.entry.payment_status || 'pending',
+            bill_image_url: prev.entry.bill_image_url || null // Preserve existing bill image
         }, items);
-        addToEditLog(editEntryId, date, previousTotal, newTotal);
+        await addToEditLog(editEntryId, date, previousTotal, newTotal);
         closeEditEntryModal();
         loadWorkerEntries();
         loadWorkerDashboard();
@@ -1306,10 +1513,10 @@ function switchAdminTab(tabName) {
     if (tabName === 'log') renderAdminLog();
 }
 
-function renderAdminLog() {
+async function renderAdminLog() {
     var tbody = document.getElementById('admin-log-tbody');
     if (!tbody) return;
-    var log = getEditLog();
+    var log = await getEditLog();
     if (log.length === 0) {
         tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#6b7280;padding:12px;">কোনো এডিট রেকর্ড নেই</td></tr>';
     } else {
@@ -1323,8 +1530,8 @@ function renderAdminLog() {
     }
 }
 
-function openEditLogModal() {
-    var log = getEditLog();
+async function openEditLogModal() {
+    var log = await getEditLog();
     var tbody = document.getElementById('edit-log-tbody');
     if (!tbody) return;
     if (log.length === 0) {
