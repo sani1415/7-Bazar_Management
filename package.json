@@ -3,12 +3,22 @@
   "version": "1.0.0",
   "description": "Playwright tests for Grocery Management System",
   "scripts": {
+    "build": "node scripts/copy-to-www.js",
+    "copy": "node scripts/copy-to-www.js",
+    "icons:android": "node scripts/generate-android-icons.js",
+    "splash:android": "node scripts/generate-android-splash.js",
     "test": "playwright test",
     "test:headed": "playwright test --headed",
     "test:ui": "playwright test --ui",
     "test:debug": "playwright test --debug"
   },
   "devDependencies": {
-    "@playwright/test": "^1.40.0"
+    "@playwright/test": "^1.40.0",
+    "sharp": "^0.34.5"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.1.0",
+    "@capacitor/cli": "^8.1.0",
+    "@capacitor/core": "^8.1.0"
   }
 }
