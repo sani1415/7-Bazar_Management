@@ -14,7 +14,7 @@
    - Click "New Query"
 
 3. **Run the Database Schema**
-   - Open the file `supabase-schema.sql` in this folder
+   - Open the file **`sql/schema.sql`** in this folder
    - Copy ALL the SQL code
    - Paste it into the Supabase SQL Editor
    - Click "Run" or press `Ctrl+Enter`
@@ -34,8 +34,9 @@ Your HTML file already has your Supabase credentials configured:
 
 ### Step 3: Open the App
 
-1. Open **`index.html`** in your web browser (same folder must contain `styles.css` and `app.js`).
-2. The app should work immediately!
+1. **In browser:** Open **`app/index.html`** (the only `index.html` is in the `app` folder).
+2. **With Live Server:** Right‑click **`app/index.html`** in the file tree → **Open with Live Server** so the server runs from `app/` and the app loads correctly.
+3. The app should work immediately!
 
 ## Features Now Working
 
@@ -68,11 +69,16 @@ Your HTML file already has your Supabase credentials configured:
    - Make sure you ran the SQL schema
    - Verify tables exist in Table Editor
 
-2. **Check Browser Console**
+2. **"No bucket available" when uploading images**
+   - The app needs a Supabase Storage bucket named **`memo-images`**.
+   - **Quick (CLI):** Add `SUPABASE_SERVICE_ROLE_KEY` to `.env`, then run **`npm run create-bucket`**, then apply the SQL in **`sql/storage-policies-memo-images.sql`** (Dashboard → SQL Editor) or **`npx supabase db push`** after linking.
+   - Full steps: **[docs/SUPABASE-STORAGE-BUCKET.md](docs/SUPABASE-STORAGE-BUCKET.md)**.
+
+3. **Check browser console**
    - Press `F12` to open Developer Tools
    - Look for any error messages in Console tab
 
-3. **Verify Credentials**
+4. **Verify Credentials**
    - Make sure Supabase URL and key are correct in the HTML file
 
 ## Storage: LocalStorage vs Supabase
@@ -80,7 +86,7 @@ Your HTML file already has your Supabase credentials configured:
 The app can run with **localStorage** (no server) or **Supabase**. Right now it uses **localStorage** by default.
 
 - **To keep using localStorage:** Do nothing. Data is saved in your browser only.
-- **To switch to Supabase:** Open **`app.js`** in an editor, find near the top:
+- **To switch to Supabase:** Open **`app/app.js`** in an editor, find near the top:
   ```js
   const USE_LOCAL_STORAGE = true;
   ```
@@ -136,15 +142,9 @@ The project is set up with **Capacitor** so you can build and run it as an Andro
    - On the **SDK Tools** tab, ensure **Android SDK Build-Tools** and **Android SDK Platform-Tools** are installed.
 4. For **JDK**: go to **File → Project Structure → SDK Location**. Set **JDK location** to the one Android Studio provides (e.g. embedded JDK) if it’s not set.
 
-### 2. Copy web app into `www` (after code changes)
+### 2. Web app lives in the `app` folder
 
-Whenever you change `index.html`, `app.js`, or `styles.css`, run:
-
-```bash
-npm run copy
-```
-
-Then sync to Android:
+All web files are in **`app/`** only (no duplicate `index.html` at project root): `app/index.html`, `app/app.js`, `app/styles.css`, `app/lib/`. Edit them there. After changes, sync to Android:
 
 ```bash
 npx cap sync android
@@ -180,21 +180,21 @@ npx cap sync android
 
 | What you want to do        | Command                 |
 |----------------------------|-------------------------|
-| Copy web files to `www`    | `npm run copy`          |
-| Sync web + config to Android | `npx cap sync android` |
+| Edit the web app           | Edit files in **`app/`** |
+| Sync app + config to Android | `npx cap sync android` |
 | Open project in Android Studio | `npx cap open android` |
 
 ---
 
 ## Pushing to GitHub
 
-**Yes, it’s OK to push all the new files** (android/, assets/, scripts/, www/, capacitor.config.json, and your changes). Here’s what’s going on:
+**Yes, it’s OK to push all the new files** (android/, app/, assets/, scripts/, capacitor.config.json, and your changes). Here’s what’s going on:
 
 - **Not pushed (ignored):**  
   `.env`, `node_modules/`, `android/build/`, `android/.gradle/`, `android/local.properties`, and other entries in the root and `android/` `.gitignore` files. Your secrets (e.g. in `.env`) stay local.
 
 - **Pushed:**  
-  Source code, Android project (without build outputs), web app in `www/`, scripts, config, and the app icon in `assets/`. This is what you want in the repo.
+  Source code, Android project (without build outputs), web app in **`app/`**, scripts, config, and the app icon in `assets/`. This is what you want in the repo.
 
 Before pushing, run `git status` and make sure `.env` does **not** appear. If it does, add `.env` to `.gitignore` and do not add that file.
 

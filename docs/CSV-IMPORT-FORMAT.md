@@ -61,3 +61,23 @@ You can mix Gregorian (2024-01-15) and Hijri (20-02-1447) dates in the same file
 - Row 3: use **total_price** only (450); price_per_unit is left empty.
 
 A file version of this sample is in the project: **`bazar-import-sample.csv`**.
+
+---
+
+## Alternate bill format (ক্রমিক, তারিখ, সামান, পরিমাণ, মূল্য)
+
+You can also paste bills in this style (e.g. from a handwritten or typed list):
+
+| Column   | Example   | Meaning        |
+|----------|-----------|----------------|
+| ক্রমিক   | ১, ২, ৩   | Serial (ignored) |
+| তারিখ   | ০৮/০৮/৪৭ | Date DD/MM/YY (Bengali digits OK; year 47 = 1447 Hijri) |
+| সামান   | টমেটো    | Item name      |
+| পরিমাণ  | ৩ কেজি   | Quantity + unit (e.g. ৩ কেজি, ২ টা, ৬ হালি, ০) |
+| মূল্য (৳) | ২৪০      | Total price (Bengali digits OK) |
+
+- Bengali numerals (০–৯) are accepted and converted automatically.
+- Date is interpreted as Hijri when year is two digits (e.g. ৪৭ → 1447).
+- The **মোট** (total) row is skipped.
+
+A recreated sample from such a bill is in **`bazar-import-sample-bill.csv`** (same data in app format).

@@ -2,7 +2,7 @@
 <html lang="bn">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5, user-scalable=yes">
     <title>বাজার ম্যানেজমেন্ট - Improved Mockup</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛒</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -31,6 +31,17 @@
         <div id="worker-view" class="view active">
             <!-- Worker dashboard (বাজারকারীর ড্যাশবোর্ড) -->
             <div class="worker-dashboard">
+                <div class="balance-card worker-balance-card">
+                    <div class="balance-card-header">
+                        <span class="balance-card-title" id="worker-balance-label">বাজারকারীর হাতে টাকা</span>
+                        <span class="balance-card-update">শেষ আপডেট</span>
+                    </div>
+                    <div class="balance-amount" id="worker-balance-amount">৳ ০</div>
+                    <div class="action-buttons">
+                        <button class="btn btn-primary balance-btn" type="button" onclick="openAddMoney()">+ টাকা দিন</button>
+                        <button class="btn btn-secondary balance-btn" type="button" onclick="openBalanceStatement()">হিসাব দেখুন</button>
+                    </div>
+                </div>
                 <div class="worker-stats-grid stats-grid">
                     <div class="stat-card">
                         <div class="stat-value" id="worker-stat-count">০</div>
@@ -203,10 +214,11 @@
                                 <th>আইটেম সংখ্যা</th>
                                 <th>মোট খরচ</th>
                                 <th>অ্যাকশন</th>
+                                <th>ডিলিট</th>
                             </tr>
                         </thead>
                         <tbody id="worker-entries-tbody">
-                            <tr><td colspan="4" style="text-align:center;color:#6b7280;padding:10px;">লোড হচ্ছে...</td></tr>
+                            <tr><td colspan="5" style="text-align:center;color:#6b7280;padding:10px;">লোড হচ্ছে...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -219,8 +231,8 @@
                 <p style="margin-bottom:12px; font-size: 13px; color: var(--text-muted, #6b7280);">শত শত পুরনো বিল একসাথে যোগ করতে CSV পেস্ট বা ফাইল আপলোড করুন। একই তারিখের সব সারি একই এন্ট্রিতে যাবে। তারিখ ইংরেজি ফরম্যাটে দিন (YYYY-MM-DD), যেমন 2024-01-15।</p>
                 <div class="form-group">
                     <label>CSV ফরম্যাট (প্রথম লাইন হেডার থাকলে সেটা বাদ দেওয়া হবে)</label>
-                    <p style="font-size:12px; margin-bottom:6px;">entry_date,item_name,quantity,unit,price_per_unit,total_price — তারিখ ইংরেজি (2024-01-15) অথবা হিজরি (20-02-1447) দুটোই চলবে। দাম যেকোন একটি দিলেই হবে; শুধু মোট দিলে প্রতি ইউনিট অটো।</p>
-                    <p style="font-size:12px; margin-bottom:8px;">উদাহরণ: 2024-01-15,চাল,5,কেজি,70, &nbsp;|&nbsp; 20-02-1447,মাছ,1,পিস,,450</p>
+                    <p style="font-size:12px; margin-bottom:6px;"><strong>স্ট্যান্ডার্ড:</strong> entry_date,item_name,quantity,unit,price_per_unit,total_price — তারিখ ইংরেজি বা হিজরি; দাম যেকোন একটি। <strong>বিল ফরম্যাট:</strong> ক্রমিক,তারিখ,সামান,পরিমাণ,মূল্য (০৮/০৮/৪৭ ও বাংলা অঙ্ক) পেস্ট করলেও চলে।</p>
+                    <p style="font-size:12px; margin-bottom:8px;">উদাহরণ: 2024-01-15,চাল,5,কেজি,70, &nbsp;|&nbsp; 08-08-1447,টমেটো,3,কেজি,,240</p>
                     <textarea id="csv-import-text" rows="8" placeholder="এখানে CSV পেস্ট করুন অথবা নিচে ফাইল চয়ন করুন..." style="width:100%; padding:10px; border-radius:6px; border:1px solid var(--border); font-family: inherit;"></textarea>
                     <input type="file" id="csv-import-file" accept=".csv,.txt" style="margin-top:8px;" onchange="readCsvFile(this)">
                 </div>
@@ -255,32 +267,31 @@
         <!-- অ্যাডমিন ভিউ -->
         <div id="admin-view" class="view">
             <!-- Dashboard (always visible, like worker) -->
-            <div class="balance-card">
+            <div class="balance-card admin-balance-card">
                 <div class="balance-card-header">
                     <span class="balance-card-title" id="balance-label">বাজারকারীর হাতে টাকা</span>
-                    <span class="balance-card-update">শেষ আপডেট: আজ, ১০:৩০ AM</span>
+                    <span class="balance-card-update">শেষ আপডেট</span>
                 </div>
                 <div class="balance-amount" id="balance-amount">৳ ০</div>
                 <div class="action-buttons">
-                    <button class="btn btn-primary balance-btn" type="button" onclick="openAddMoney()">+ টাকা দিন</button>
                     <button class="btn btn-secondary balance-btn" type="button" onclick="openBalanceStatement()">হিসাব দেখুন</button>
                 </div>
             </div>
-            <div class="stats-grid">
+            <div id="admin-stats-grid" class="stats-grid">
                 <div class="stat-card">
-                    <div class="stat-value">৳ ১২,৩৪৫</div>
-                    <div class="stat-label">এই মাসের মোট খরচ</div>
+                    <div class="stat-value">—</div>
+                    <div class="stat-label">মোট খরচ (ফিল্টার অনুযায়ী)</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-value">২৮</div>
+                    <div class="stat-value">—</div>
                     <div class="stat-label">মোট বাজার এন্ট্রি</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-value">৳ ৪৪১</div>
-                    <div class="stat-label">গড় দৈনিক খরচ</div>
+                    <div class="stat-value">—</div>
+                    <div class="stat-label">গড় প্রতি এন্ট্রি</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-value" id="stat-hand-balance">৳ ০</div>
+                    <div class="stat-value" id="stat-hand-balance">—</div>
                     <div class="stat-label" id="stat-hand-label">বাজারকারীর হাতে টাকা</div>
                 </div>
             </div>
@@ -297,6 +308,7 @@
                     <div class="card-title">ফিল্টার ও সার্চ</div>
                     <div class="filter-bar">
                         <select id="admin-filter-date" onchange="applyAdminDateFilterVisibility(); loadAdminData();">
+                            <option value="all_time" selected>সব সময় (সব এন্ট্রি)</option>
                             <option value="this_month">এই মাস</option>
                             <option value="last_month">গত মাস</option>
                             <option value="this_week">এই সপ্তাহ</option>
@@ -319,9 +331,9 @@
                         <button type="button" class="btn btn-primary" onclick="loadAdminData()">🔍 প্রয়োগ করুন</button>
                     </div>
                 </div>
-                <!-- Recent Entries -->
+                <!-- Entries list (filtered by date/category/search) -->
                 <div class="card">
-                    <div class="card-title">সাম্প্রতিক বাজার এন্ট্রি</div>
+                    <div class="card-title">বাজার এন্ট্রি</div>
                     <table class="table table-entries">
                         <thead>
                             <tr>
@@ -338,7 +350,7 @@
                 </div>
                 <!-- Item Summary -->
                 <div class="card">
-                    <div class="card-title">এই মাসে সবচেয়ে বেশি কেনা</div>
+                    <div class="card-title">সবচেয়ে বেশি কেনা (ফিল্টার অনুযায়ী)</div>
                     <table class="table">
                         <thead>
                             <tr>

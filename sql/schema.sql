@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS grocery_items (
     price_per_unit DECIMAL(10, 2) NOT NULL,
     total_price DECIMAL(10, 2) NOT NULL,
     category VARCHAR(50),
+    memo_image_url TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

@@ -160,3 +160,4 @@ function getNewMoonMJDNIndexByJDN(mjdn) {
 }
 
 window.hijriToGregorian = function(hy, hm, hd) { return d2g(h2d(hy, hm, hd)); };
+window.gregorianToHijri = function(gy, gm, gd) { return d2h(g2d(gy, gm, gd)); };

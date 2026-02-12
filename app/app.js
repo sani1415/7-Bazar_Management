@@ -4,9 +4,19 @@
 const USE_LOCAL_STORAGE = false;  // Set to false when you want to use Supabase
 
 // Initialize Supabase (used only when USE_LOCAL_STORAGE is false)
-const SUPABASE_URL = 'https://vdzpvgmgjbbdezqbovrk.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_9Xl0JMyH8rSzADScnea4zg_tbzMcmjq';
+// Use same credentials as in .env (browser does not load .env; keep app.js in sync with your project)
+const SUPABASE_URL = 'https://kajaxkqwxbbgmdlqkcjn.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImthamF4a3F3eGJiZ21kbHFrY2puIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA4MDQ3NDIsImV4cCI6MjA4NjM4MDc0Mn0.ulE9_0Sv-TpETDWmJtJxVOWx6CuKkeCw2KJqw9Af6JU';
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// User-friendly message when Supabase is unreachable (network/DNS)
+function getNetworkErrorMessage(err) {
+    var msg = (err && (err.message || err.details || '')) || '';
+    if (/failed to fetch|network|ERR_NAME_NOT_RESOLVED|load failed/i.test(msg)) {
+        return 'সার্ভারে সংযোগ হচ্ছে না। ইন্টারনেট চেক করুন। (Supabase অফলাইনে থাকলে app.js এ USE_LOCAL_STORAGE = true দিন)';
+    }
+    return 'লোড করতে সমস্যা হয়েছে';
+}
 
 // ---------- LocalStorage adapter ----------
 const LS_ENTRIES = 'bazar_entries';
@@ -84,21 +94,21 @@ async function getEditLog() {
     }
 }
 
-async function addToEditLog(entryId, entryDate, previousTotal, newTotal) {
+async function addToEditLog(entryId, entryDate, previousTotal, newTotal, summary) {
     if (USE_LOCAL_STORAGE) {
-        const log = getEditLog(); // Note: getEditLog is now async, but we're in localStorage branch. This will still work as sync, as it returns a promise.
+        const log = await getEditLog();
         log.unshift({
             entry_id: entryId,
             entry_date: entryDate,
             edited_at: new Date().toISOString(),
             previous_total: previousTotal,
-            new_total: newTotal
+            new_total: newTotal,
+            summary: summary || null
         });
         try {
             localStorage.setItem(LS_EDIT_LOG, JSON.stringify(log));
         } catch (e) { /* ignore */ }
     } else {
-        // Insert into Supabase edit_log table
         const { error } = await supabaseClient
             .from('edit_log')
             .insert([{
@@ -106,11 +116,11 @@ async function addToEditLog(entryId, entryDate, previousTotal, newTotal) {
                 entry_date: entryDate,
                 previous_total: previousTotal,
                 new_total: newTotal,
-                // edited_at defaults to NOW() in SQL
+                summary: summary || null
             }]);
         if (error) {
             console.error('Error adding to edit log in Supabase:', error);
-            throw error; // Propagate error
+            throw error;
         }
     }
 }
@@ -120,6 +130,19 @@ function getBalance() {
     const totalAdded = getTotalAdded();
     const entries = USE_LOCAL_STORAGE ? localStorageAdapter._getEntries() : [];
     const totalSpent = entries.reduce((sum, e) => sum + Number(e.total_cost || 0), 0);
+    return totalAdded - totalSpent;
+}
+
+async function getBalanceAsync() {
+    const totalAdded = getTotalAdded();
+    let totalSpent = 0;
+    if (USE_LOCAL_STORAGE) {
+        const entries = localStorageAdapter._getEntries();
+        totalSpent = entries.reduce((sum, e) => sum + Number(e.total_cost || 0), 0);
+    } else {
+        const entries = await storage.getEntriesInDateRange('2000-01-01', '2099-12-31');
+        totalSpent = (entries || []).reduce((sum, e) => sum + Number(e.total_cost || 0), 0);
+    }
     return totalAdded - totalSpent;
 }
 
@@ -265,6 +288,16 @@ const localStorageAdapter = {
         });
         this._saveEntries(entries);
         this._saveItems(newItems);
+    },
+
+    async deleteEntry(entryId) {
+        const id = Number(entryId);
+        const { entry, items } = await this.getEntryById(id);
+        await addToEditLog(entry.id, entry.entry_date, Number(entry.total_cost) || 0, 0, 'Entry deleted');
+        const entries = this._getEntries().filter(function (e) { return e.id !== id; });
+        const allItems = this._getItems().filter(function (it) { return it.entry_id !== id; });
+        this._saveEntries(entries);
+        this._saveItems(allItems);
     }
 };
 
@@ -399,11 +432,13 @@ const supabaseAdapter = {
     },
 
     async updateEntry(entryId, entryData, items) {
+        var totalCost = Number(entryData.total_cost);
+        if (!Number.isFinite(totalCost)) totalCost = 0;
         const { error: upErr } = await supabaseClient
             .from('grocery_entries')
             .update({
                 entry_date: entryData.entry_date,
-                total_cost: entryData.total_cost,
+                total_cost: totalCost,
                 item_count: entryData.item_count,
                 comment: entryData.comment || null,
                 updated_at: new Date().toISOString(),
@@ -412,20 +447,34 @@ const supabaseAdapter = {
             .eq('id', entryId);
         if (upErr) throw upErr;
         await supabaseClient.from('grocery_items').delete().eq('entry_id', entryId);
-        const itemsToInsert = items.map(item => ({
-            entry_id: entryId,
-            item_name: item.name,
-            quantity: item.quantity,
-            unit: item.unit,
-            price_per_unit: item.price_per_unit,
-            total_price: item.total_price,
-            category: item.category,
-            memo_image_url: item.memo_image_url || null
-        }));
+        const itemsToInsert = items.map(item => {
+            var qty = Number(item.quantity);
+            var pricePerUnit = Number(item.price_per_unit);
+            var totalPrice = Number(item.total_price);
+            if (!Number.isFinite(totalPrice)) totalPrice = (Number.isFinite(qty) && Number.isFinite(pricePerUnit)) ? qty * pricePerUnit : 0;
+            return {
+                entry_id: entryId,
+                item_name: item.name,
+                quantity: Number.isFinite(qty) ? qty : 0,
+                unit: item.unit,
+                price_per_unit: Number.isFinite(pricePerUnit) ? pricePerUnit : 0,
+                total_price: totalPrice,
+                category: item.category,
+                memo_image_url: item.memo_image_url || null
+            };
+        });
         if (itemsToInsert.length) {
             const { error: insErr } = await supabaseClient.from('grocery_items').insert(itemsToInsert);
             if (insErr) throw insErr;
         }
+    },
+
+    async deleteEntry(entryId) {
+        const { entry } = await this.getEntryById(entryId);
+        await addToEditLog(entry.id, entry.entry_date, Number(entry.total_cost) || 0, 0, 'Entry deleted');
+        await supabaseClient.from('grocery_items').delete().eq('entry_id', entryId);
+        const { error } = await supabaseClient.from('grocery_entries').delete().eq('id', entryId);
+        if (error) throw error;
     }
 };
 
@@ -505,21 +554,23 @@ function seedExampleData() {
 }
 
 // ---------- Balance UI: show hand balance (positive or minus) ----------
-function updateBalanceUI() {
-    const balance = getBalance();
+async function updateBalanceUI() {
+    const balance = USE_LOCAL_STORAGE ? getBalance() : await getBalanceAsync();
     const amountEl = document.getElementById('balance-amount');
     const statHandEl = document.getElementById('stat-hand-balance');
     const labelEl = document.getElementById('balance-label');
     const statLabelEl = document.getElementById('stat-hand-label');
-    const handLabel = balance >= 0 ? 'বাজারকারীর হাতে টাকা' : 'আপনি তাঁকে দিতে বাকি';
-    if (amountEl) {
-        amountEl.textContent = (balance >= 0 ? '৳ ' : '-৳ ') + Math.abs(balance).toLocaleString('bn-BD');
-    }
-    if (statHandEl) {
-        statHandEl.textContent = (balance >= 0 ? '৳ ' : '-৳ ') + Math.abs(balance).toLocaleString('bn-BD');
-    }
+    const handLabel = balance >= 0 ? 'বাজারকারীর হাতে টাকা' : 'বাকি';
+    const text = (balance >= 0 ? '৳ ' : '-৳ ') + Math.abs(balance).toLocaleString('bn-BD');
+    if (amountEl) amountEl.textContent = text;
+    if (statHandEl) statHandEl.textContent = text;
     if (labelEl) labelEl.textContent = handLabel;
     if (statLabelEl) statLabelEl.textContent = handLabel;
+    // Worker balance card (if present)
+    const workerAmountEl = document.getElementById('worker-balance-amount');
+    const workerLabelEl = document.getElementById('worker-balance-label');
+    if (workerAmountEl) workerAmountEl.textContent = text;
+    if (workerLabelEl) workerLabelEl.textContent = handLabel;
 }
 
 function openAddMoney() {
@@ -538,7 +589,7 @@ function openAddMoney() {
 function openBalanceStatement() {
     const overlay = document.getElementById('balance-statement-overlay');
     if (overlay) overlay.classList.add('show');
-    renderBalanceStatementContent('all');
+    renderBalanceStatementContent('all'); // async; content fills in
 }
 
 function closeBalanceStatement() {
@@ -547,7 +598,7 @@ function closeBalanceStatement() {
 }
 
 // Filter: 'all' | 'this_month' | 'last_month'
-function renderBalanceStatementContent(filterValue) {
+async function renderBalanceStatementContent(filterValue) {
     const body = document.getElementById('balance-statement-body');
     if (!body) return;
 
@@ -566,8 +617,14 @@ function renderBalanceStatementContent(filterValue) {
 
     const totalInPeriod = filtered.reduce(function (sum, e) { return sum + Number(e.amount || 0); }, 0);
     const totalAdded = getTotalAdded();
-    const entries = USE_LOCAL_STORAGE ? localStorageAdapter._getEntries() : [];
-    const totalSpent = entries.reduce(function (sum, e) { return sum + Number(e.total_cost || 0); }, 0);
+    let totalSpent = 0;
+    if (USE_LOCAL_STORAGE) {
+        const entries = localStorageAdapter._getEntries();
+        totalSpent = entries.reduce(function (sum, e) { return sum + Number(e.total_cost || 0); }, 0);
+    } else {
+        const entries = await storage.getEntriesInDateRange('2000-01-01', '2099-12-31');
+        totalSpent = (entries || []).reduce(function (sum, e) { return sum + Number(e.total_cost || 0); }, 0);
+    }
     const balance = totalAdded - totalSpent;
 
     const filterLabel = filterValue === 'this_month' ? 'এই মাস' : filterValue === 'last_month' ? 'গত মাস' : 'সব সময়';
@@ -592,7 +649,7 @@ function renderBalanceStatementContent(filterValue) {
         '<p style="margin-bottom:6px;"><strong>সর্বমোট দিয়েছেন:</strong> ৳ ' + totalAdded.toLocaleString('bn-BD') + '</p>' +
         '<p style="margin-bottom:6px;"><strong>মোট বাজার খরচ (সব এন্ট্রি):</strong> ৳ ' + totalSpent.toLocaleString('bn-BD') + '</p>' +
         '<p style="margin-bottom:0; font-weight:600; font-size:1.05rem;">' +
-        (balance >= 0 ? 'বাজারকারীর হাতে টাকা: ৳ ' : 'আপনি দিতে বাকি: -৳ ') + Math.abs(balance).toLocaleString('bn-BD') + '</p>';
+        (balance >= 0 ? 'বাজারকারীর হাতে টাকা: ৳ ' : 'বাকি: -৳ ') + Math.abs(balance).toLocaleString('bn-BD') + '</p>';
 }
 
 
@@ -637,7 +694,6 @@ async function loadWorkerDashboard() {
     const balanceEl = document.getElementById('worker-stat-balance');
     const balanceLabelEl = document.getElementById('worker-stat-balance-label');
     const recentTbody = document.getElementById('worker-recent-tbody');
-    if (!recentTbody) return;
 
     try {
         const now = new Date();
@@ -648,7 +704,7 @@ async function loadWorkerDashboard() {
         ]);
         const count = monthEntries.length;
         const monthTotal = monthEntries.reduce(function (s, e) { return s + Number(e.total_cost || 0); }, 0);
-        const balance = getBalance();
+        const balance = USE_LOCAL_STORAGE ? getBalance() : await getBalanceAsync();
         const handLabel = balance >= 0 ? 'হাতে টাকা' : 'বাকি পাওনা';
 
         if (countEl) countEl.textContent = count.toString();
@@ -656,18 +712,26 @@ async function loadWorkerDashboard() {
         if (balanceEl) balanceEl.textContent = (balance >= 0 ? '৳ ' : '-৳ ') + Math.abs(balance).toLocaleString('bn-BD');
         if (balanceLabelEl) balanceLabelEl.textContent = handLabel;
 
-        if (recentList && recentList.length > 0) {
-            recentTbody.innerHTML = recentList.map(function (e) {
-                const d = e.entry_date || '';
-                const dateStr = d.length >= 10 ? (d.substring(8, 10) + '/' + d.substring(5, 7) + '/' + d.substring(0, 4)) : d;
-                return '<tr><td>' + dateStr + '</td><td style="font-weight:600;">৳ ' + Number(e.total_cost).toLocaleString('bn-BD') + '</td></tr>';
-            }).join('');
-        } else {
-            recentTbody.innerHTML = '<tr><td colspan="2" style="text-align:center;color:#6b7280;padding:10px;">কোনো এন্ট্রি নেই</td></tr>';
+        if (recentTbody) {
+            if (recentList && recentList.length > 0) {
+                recentTbody.innerHTML = recentList.map(function (e) {
+                    const d = e.entry_date || '';
+                    const dateStr = d.length >= 10 ? (d.substring(8, 10) + '/' + d.substring(5, 7) + '/' + d.substring(0, 4)) : d;
+                    return '<tr><td>' + dateStr + '</td><td style="font-weight:600;">৳ ' + Number(e.total_cost).toLocaleString('bn-BD') + '</td></tr>';
+                }).join('');
+            } else {
+                recentTbody.innerHTML = '<tr><td colspan="2" style="text-align:center;color:#6b7280;padding:10px;">কোনো এন্ট্রি নেই</td></tr>';
+            }
         }
+        await updateBalanceUI();
     } catch (err) {
         console.error('Error loading worker dashboard:', err);
-        if (recentTbody) recentTbody.innerHTML = '<tr><td colspan="2" style="text-align:center;color:#946a6a;padding:10px;">লোড করতে সমস্যা হয়েছে</td></tr>';
+        if (countEl) countEl.textContent = '—';
+        if (totalEl) totalEl.textContent = '—';
+        if (balanceEl) balanceEl.textContent = '—';
+        if (balanceLabelEl) balanceLabelEl.textContent = 'হাতে টাকা';
+        if (recentTbody) recentTbody.innerHTML = '<tr><td colspan="2" style="text-align:center;color:#946a6a;padding:10px;">' + getNetworkErrorMessage(err) + '</td></tr>';
+        await updateBalanceUI();
     }
 }
 
@@ -683,15 +747,31 @@ async function loadWorkerEntries() {
                     '<td>' + formatDate(entry.entry_date) + '</td>' +
                     '<td>' + (entry.item_count || 0) + 'টি আইটেম</td>' +
                     '<td style="font-weight:600;">৳ ' + Number(entry.total_cost).toLocaleString('bn-BD') + '</td>' +
-                    '<td><button type="button" class="btn btn-primary entry-btn" onclick="viewDetails(' + entry.id + ')">বিস্তারিত</button></td>' +
+                    '<td><button type="button" class="btn btn-primary entry-btn" onclick="viewDetails(' + entry.id + ', false)">বিস্তারিত</button></td>' +
+                    '<td><button type="button" class="btn btn-danger entry-delete-btn" onclick="deleteEntryConfirm(' + entry.id + ')" title="এন্ট্রি ডিলিট করুন (লগে সেভ হবে)">ডিলিট</button></td>' +
                     '</tr>';
             }).join('');
         } else {
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#6b7280;padding:10px;">কোনো এন্ট্রি নেই</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#6b7280;padding:10px;">কোনো এন্ট্রি নেই</td></tr>';
         }
     } catch (err) {
         console.error('Error loading worker entries:', err);
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#946a6a;padding:10px;">লোড করতে সমস্যা হয়েছে</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#946a6a;padding:10px;">' + getNetworkErrorMessage(err) + '</td></tr>';
+    }
+}
+
+async function deleteEntryConfirm(entryId) {
+    if (!confirm('এই এন্ট্রিটি ডিলিট করতে চান? ডিলিটের রেকর্ড লগে সেভ থাকবে।')) return;
+    try {
+        await storage.deleteEntry(entryId);
+        loadWorkerEntries();
+        loadWorkerDashboard();
+        updateBalanceUI();
+        if (typeof loadAdminData === 'function') loadAdminData();
+        alert('এন্ট্রি ডিলিট হয়েছে।');
+    } catch (err) {
+        console.error('Error deleting entry:', err);
+        alert('ত্রুটি: ' + (err.message || err));
     }
 }
 
@@ -719,7 +799,8 @@ async function renderWorkerLog() {
             var entryStr = entryDate.length >= 10 ? entryDate.substring(8, 10) + '/' + entryDate.substring(5, 7) + '/' + entryDate.substring(0, 4) : entryDate;
             var editedAt = e.edited_at || '';
             var editedStr = editedAt.length >= 16 ? editedAt.substring(8, 10) + '/' + editedAt.substring(5, 7) + '/' + editedAt.substring(0, 4) + ' ' + editedAt.substring(11, 16) : editedAt;
-            return '<tr><td>' + entryStr + '</td><td>' + editedStr + '</td><td>৳ ' + Number(e.previous_total).toLocaleString('bn-BD') + '</td><td>৳ ' + Number(e.new_total).toLocaleString('bn-BD') + '</td></tr>';
+            var newTotalCell = (e.summary === 'Entry deleted') ? 'ডিলিট হয়েছে' : ('৳ ' + Number(e.new_total).toLocaleString('bn-BD'));
+            return '<tr><td>' + entryStr + '</td><td>' + editedStr + '</td><td>৳ ' + Number(e.previous_total).toLocaleString('bn-BD') + '</td><td>' + newTotalCell + '</td></tr>';
         }).join('');
     }
 }
@@ -824,6 +905,55 @@ function normalizeImportDate(dateStr) {
     return dateStr;
 }
 
+// Bengali numeral (০-৯) to ASCII (0-9) for alternate bill format
+var bnDigits = '০১২৩৪৫৬৭৮৯';
+function bnToAsciiNum(s) {
+    if (s == null || s === '') return s;
+    var str = String(s).trim();
+    var out = '';
+    for (var i = 0; i < str.length; i++) {
+        var idx = bnDigits.indexOf(str[i]);
+        if (idx >= 0) out += idx;
+        else if (str[i] === ',' || str[i] === '.') out += str[i];
+        else out += str[i];
+    }
+    return out;
+}
+
+// Detect and parse alternate format: ক্রমিক, তারিখ, সামান, পরিমাণ, মূল্য (e.g. ১,০৮/০৮/৪৭,টমেটো,৩ কেজি,২৪০)
+function parseAlternateBillRow(parts) {
+    if (parts.length < 5) return null;
+    var col2 = (parts[1] || '').trim();
+    var col4 = (parts[3] || '').trim();
+    var col5 = (parts[4] || '').trim();
+    if (!/[\d০-৯]+\/[\d০-৯]+\/[\d০-৯]+/.test(bnToAsciiNum(col2))) return null; // date like DD/MM/YY
+    var dateStr = bnToAsciiNum(col2);
+    var day = '', month = '', year = '';
+    var slashSplit = dateStr.split('/');
+    if (slashSplit.length >= 3) {
+        day = slashSplit[0].replace(/^0+/, '') || '0';
+        month = slashSplit[1].replace(/^0+/, '') || '0';
+        year = slashSplit[2].replace(/^0+/, '') || '0';
+        if (year.length <= 2) year = '14' + year; // 47 -> 1447 Hijri
+        dateStr = (day.length === 1 ? '0' + day : day) + '-' + (month.length === 1 ? '0' + month : month) + '-' + year;
+    } else return null;
+    var itemName = (parts[2] || '').trim().replace(/^["']|["']$/g, '');
+    if (!itemName) return null;
+    var qtyUnit = bnToAsciiNum(col4).trim();
+    var quantity = 0, unit = 'পিস';
+    var match = qtyUnit.match(/^([\d.]+)\s*(.*)$/);
+    if (match) {
+        quantity = parseFloat(match[1]) || 0;
+        unit = (match[2] || 'পিস').trim() || 'পিস';
+    } else if (/^[\d.]+$/.test(qtyUnit)) {
+        quantity = parseFloat(qtyUnit) || 0;
+    }
+    var totalPrice = parseFloat(bnToAsciiNum(col5).replace(/,/g, '')) || 0;
+    var entryDate = normalizeImportDate(dateStr);
+    var price = quantity > 0 ? totalPrice / quantity : totalPrice;
+    return { entry_date: entryDate, item_name: itemName, quantity: quantity, unit: unit, price_per_unit: price, total_price: totalPrice, category: 'অন্যান্য' };
+}
+
 // CSV import for old bills
 function readCsvFile(fileInput) {
     if (!fileInput.files || !fileInput.files[0]) return;
@@ -851,32 +981,43 @@ async function doCsvImport() {
         return;
     }
     var rows = [];
+    var useAlternateFormat = null;
     for (var i = 0; i < lines.length; i++) {
         var parts = lines[i].split(',').map(function (s) { return s.trim().replace(/^["']|["']$/g, ''); });
-        if (parts.length < 5) continue; // Minimum 5 columns: date, name, qty, unit, price/unit or total_price
+        if (parts.length < 5) continue;
 
+        // Try alternate format (ক্রমিক, তারিখ, সামান, পরিমাণ, মূল্য) when 5 columns and col2 looks like DD/MM/YY
+        var alt = parseAlternateBillRow(parts);
+        if (alt) {
+            if (useAlternateFormat === null) useAlternateFormat = true;
+            if (useAlternateFormat) {
+                rows.push(alt);
+                continue;
+            }
+        } else if (useAlternateFormat === true) {
+            continue;
+        }
+
+        // Standard format: entry_date, item_name, quantity, unit, price_per_unit, total_price
         var entryDate = normalizeImportDate(parts[0]);
         var itemName = parts[1];
-        var quantity = parseFloat(parts[2]) || 0;
+        var quantity = parseFloat(bnToAsciiNum(parts[2])) || parseFloat(parts[2]) || 0;
         var unit = (parts[3] || 'কেজি').trim() || 'কেজি';
-        var pricePerUnit = parseFloat(parts[4]) || 0;
-        var totalPriceFromFile = parseFloat(parts[5]) || 0; // optional total_price from CSV
+        var pricePerUnit = parseFloat(bnToAsciiNum(parts[4])) || parseFloat(parts[4]) || 0;
+        var totalPriceFromFile = parseFloat(bnToAsciiNum(parts[5])) || parseFloat(parts[5]) || 0;
 
-        // Skip header lines (if any) based on content
-        if (entryDate.toLowerCase().indexOf('date') >= 0 || itemName.toLowerCase().indexOf('name') >= 0) continue;
+        if (entryDate.toLowerCase().indexOf('date') >= 0 || (itemName && itemName.toLowerCase().indexOf('name') >= 0)) continue;
+        if (/^ক্রমিক|মোট$/i.test((parts[0] || '').trim()) || /^ক্রমিক|মোট$/i.test((itemName || '').trim())) continue;
         if (!itemName) continue;
 
         var total, price;
         if (pricePerUnit > 0) {
-            // If price_per_unit is provided, calculate total from it (priority)
             total = quantity * pricePerUnit;
             price = pricePerUnit;
         } else if (totalPriceFromFile > 0) {
-            // If price_per_unit is not provided, but total_price is given
             total = totalPriceFromFile;
-            price = quantity > 0 ? totalPriceFromFile / quantity : totalPriceFromFile; // If qty 0, per unit is total
+            price = quantity > 0 ? totalPriceFromFile / quantity : totalPriceFromFile;
         } else {
-            // Neither price_per_unit nor total_price provided
             total = 0;
             price = 0;
         }
@@ -929,6 +1070,58 @@ async function doCsvImport() {
     loadWorkerEntries();
     if (document.getElementById('admin-view').classList.contains('active')) loadAdminData();
     updateBalanceUI();
+}
+
+// Show preview when user selects a memo image for an item (edit entry modal) — upload or base64, then update hidden URL and preview
+async function previewEditMemoImage(fileInput) {
+    var row = fileInput.closest('tr');
+    if (!row) return;
+    var urlInput = row.querySelector('.edit-item-memo-url');
+    var preview = row.querySelector('.edit-memo-preview');
+    var hasPic = row.querySelector('.edit-memo-has-pic');
+    if (!urlInput || !preview) return;
+    if (!fileInput.files || !fileInput.files[0]) {
+        urlInput.value = '';
+        preview.src = '';
+        preview.style.display = 'none';
+        preview.removeAttribute('onclick');
+        if (hasPic) hasPic.style.display = 'none';
+        return;
+    }
+    var file = fileInput.files[0];
+    if (USE_LOCAL_STORAGE) {
+        try {
+            var dataUrl = await new Promise(function (res, rej) {
+                var r = new FileReader();
+                r.onload = function () { res(r.result); };
+                r.onerror = rej;
+                r.readAsDataURL(file);
+            });
+            urlInput.value = dataUrl;
+            preview.src = dataUrl;
+            preview.style.display = 'inline-block';
+            preview.onclick = function () { viewMemoImage(preview.src); };
+            if (hasPic) hasPic.style.display = 'inline';
+        } catch (e) { console.warn('Edit memo read failed', e); }
+        return;
+    }
+    try {
+        var ext = (file.name || '').split('.').pop() || 'jpg';
+        var rowIndex = Array.prototype.indexOf.call(row.parentElement.children, row);
+        var path = editEntryId + '/edit_' + rowIndex + '_' + Date.now() + '.' + ext;
+        var up = await supabaseClient.storage.from(MEMO_BUCKET).upload(path, file, { upsert: true });
+        if (up.error) throw up.error;
+        var urlData = supabaseClient.storage.from(MEMO_BUCKET).getPublicUrl(path);
+        var publicUrl = urlData.data.publicUrl;
+        urlInput.value = publicUrl;
+        preview.src = publicUrl;
+        preview.style.display = 'inline-block';
+        preview.onclick = function () { viewMemoImage(preview.src); };
+        if (hasPic) hasPic.style.display = 'inline';
+    } catch (e) {
+        console.warn('Edit memo upload failed', e);
+        alert('মেমো আপলোড হয়নি: ' + (e.message || e));
+    }
 }
 
 // Show preview when user selects a memo image for an item
@@ -998,12 +1191,18 @@ function addQuickItem(itemName) {
     lastRow.querySelector('.item-name').value = itemName;
 }
 
+// Effective qty for total: when quantity is 0, use 1 so fixed charges (ভাড়া, মেরামত) show price as total
+function effectiveQtyForTotal(qty) {
+    var n = Number(qty);
+    return (Number.isFinite(n) && n > 0) ? n : 1;
+}
+
 // Calculate row total
 function calculateRow(input) {
     const row = input.closest('tr');
     const quantity = parseFloat(row.querySelector('.item-quantity').value) || 0;
     const price = parseFloat(row.querySelector('.item-price').value) || 0;
-    const total = quantity * price;
+    const total = effectiveQtyForTotal(quantity) * price;
     const totalCell = row.querySelector('.item-total');
     totalCell.textContent = formatCurrency(total);
     updateSummary();
@@ -1021,7 +1220,7 @@ function updateSummary() {
             totalItems++;
             const quantity = parseFloat(row.querySelector('.item-quantity').value) || 0;
             const price = parseFloat(row.querySelector('.item-price').value) || 0;
-            totalCost += quantity * price;
+            totalCost += effectiveQtyForTotal(quantity) * price;
         }
     });
 
@@ -1036,10 +1235,30 @@ function formatCurrency(amount) {
     return formatted + ' টাকা';
 }
 
-// Format date in Bengali
+// Bengali numerals 0-9 for Hijri date display
+var bnNum = '০১২৩৪৫৬৭৮৯';
+function toBengaliDigits(n) {
+    var s = String(Math.floor(n));
+    var out = '';
+    for (var i = 0; i < s.length; i++) out += bnNum[parseInt(s[i], 10)];
+    return out;
+}
+
+// Format date as Hijri (Bangladesh / Umm al-Qura) for display. Store remains Gregorian in DB.
 function formatDate(dateString) {
-    const date = new Date(dateString);
-    const months = ['জানুয়ারি', 'ফেব্রুয়ারি', 'মার্চ', 'এপ্রিল', 'মে', 'জুন',
+    if (!dateString) return '';
+    var s = String(dateString).trim();
+    var match = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!match) return s;
+    var gy = parseInt(match[1], 10), gm = parseInt(match[2], 10), gd = parseInt(match[3], 10);
+    if (typeof window.gregorianToHijri === 'function') {
+        var h = window.gregorianToHijri(gy, gm, gd);
+        if (h && h.hy != null && h.hm != null && h.hd != null) {
+            return toBengaliDigits(h.hd) + '-' + toBengaliDigits(h.hm) + '-' + toBengaliDigits(h.hy);
+        }
+    }
+    var date = new Date(gy, gm - 1, gd);
+    var months = ['জানুয়ারি', 'ফেব্রুয়ারি', 'মার্চ', 'এপ্রিল', 'মে', 'জুন',
                   'জুলাই', 'আগস্ট', 'সেপ্টেম্বর', 'অক্টোবর', 'নভেম্বর', 'ডিসেম্বর'];
     return date.getDate() + ' ' + months[date.getMonth()] + ', ' + date.getFullYear();
 }
@@ -1058,7 +1277,7 @@ async function saveEntry() {
             const price = parseFloat(row.querySelector('.item-price').value) || 0;
             const unit = row.querySelector('.item-unit').value;
             const category = row.querySelector('.item-category').value;
-            const total = quantity * price;
+            const total = effectiveQtyForTotal(quantity) * price;
             const memoFileInput = row.querySelector('.item-memo-file');
             const memoFile = memoFileInput && memoFileInput.files && memoFileInput.files[0] ? memoFileInput.files[0] : null;
             const item = {
@@ -1180,11 +1399,14 @@ async function saveEntry() {
 // Admin filter: get current date range from UI
 function getAdminDateRange() {
     var sel = document.getElementById('admin-filter-date');
-    var value = (sel && sel.value) ? sel.value : 'this_month';
+    var value = (sel && sel.value) ? sel.value : 'all_time';
     var now = new Date();
     var y = now.getFullYear(), m = now.getMonth();
     var start = '', end = '';
-    if (value === 'today') {
+    if (value === 'all_time') {
+        start = '2000-01-01';
+        end = '2099-12-31';
+    } else if (value === 'today') {
         start = end = now.toISOString().split('T')[0];
     } else if (value === 'this_week') {
         var day = now.getDay();
@@ -1258,7 +1480,7 @@ async function loadAdminData() {
                     '<td>' + formatDate(entry.entry_date) + ' ' + memoBadge + '</td>' +
                     '<td>' + (entry.item_count || 0) + 'টি আইটেম</td>' +
                     '<td style="font-weight: 600;">৳ ' + Number(entry.total_cost).toLocaleString('bn-BD') + '</td>' +
-                    '<td class="entry-actions-cell"><span class="entry-actions"><button type="button" class="btn btn-primary entry-btn" onclick="viewDetails(' + entry.id + ')">বিস্তারিত</button></span></td>' +
+                    '<td class="entry-actions-cell"><span class="entry-actions"><button type="button" class="btn btn-primary entry-btn" onclick="viewDetails(' + entry.id + ', true)">বিস্তারিত</button></span></td>' +
                     '</tr>';
             }).join('');
         } else {
@@ -1269,11 +1491,11 @@ async function loadAdminData() {
         updateBalanceUI();
     } catch (error) {
         console.error('Error loading admin data:', error);
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 20px; color: #946a6a;">ডেটা লোড করতে সমস্যা হয়েছে</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 20px; color: #946a6a;">' + getNetworkErrorMessage(error) + '</td></tr>';
     }
 }
 
-// Load statistics (uses admin date filter range when start/end provided)
+// Load statistics from database (uses admin date filter range)
 async function loadStatistics(startDate, endDate) {
     try {
         if (!startDate || !endDate) {
@@ -1284,15 +1506,24 @@ async function loadStatistics(startDate, endDate) {
         var entries = await storage.getEntriesInDateRange(startDate, endDate);
         var totalCost = (entries || []).reduce(function (sum, e) { return sum + Number(e.total_cost || 0); }, 0);
         var entryCount = (entries || []).length;
-        var avgDaily = entryCount > 0 ? totalCost / entryCount : 0;
-        var statCards = document.querySelectorAll('.stat-value');
+        var avgPerEntry = entryCount > 0 ? totalCost / entryCount : 0;
+        var grid = document.getElementById('admin-stats-grid');
+        var statCards = grid ? grid.querySelectorAll('.stat-value') : [];
         if (statCards.length >= 4) {
             statCards[0].textContent = '৳ ' + Math.round(totalCost).toLocaleString('bn-BD');
             statCards[1].textContent = entryCount.toString();
-            statCards[2].textContent = '৳ ' + Math.round(avgDaily).toLocaleString('bn-BD');
+            statCards[2].textContent = entryCount > 0 ? ('৳ ' + Math.round(avgPerEntry).toLocaleString('bn-BD')) : '—';
+            // statCards[3] = balance, updated by updateBalanceUI()
         }
     } catch (error) {
         console.error('Error loading statistics:', error);
+        var grid = document.getElementById('admin-stats-grid');
+        var statCards = grid ? grid.querySelectorAll('.stat-value') : [];
+        if (statCards.length >= 3) {
+            statCards[0].textContent = '—';
+            statCards[1].textContent = '—';
+            statCards[2].textContent = '—';
+        }
     }
 }
 
@@ -1345,8 +1576,8 @@ async function togglePayment(entryId, currentStatus) {
     }
 }
 
-// View entry details in modal (with per-item memo indicator)
-async function viewDetails(entryId) {
+// View entry details in modal (with per-item memo indicator). fromAdmin=true means no edit button.
+async function viewDetails(entryId, fromAdmin) {
     try {
         const { entry, items } = await storage.getEntryById(entryId);
         let html = '';
@@ -1362,10 +1593,13 @@ async function viewDetails(entryId) {
             const memoCell = memoUrl
                 ? '<span role="button" class="memo-thumb-wrap" data-memo-src="' + escapeHtmlAttr(memoUrl) + '" onclick="viewMemoImage(this.getAttribute(\'data-memo-src\'))" title="মেমো ছবি দেখুন"><img class="item-memo-thumb" src="' + escapeHtmlAttr(memoUrl) + '" alt="মেমো"></span>'
                 : '<span style="color:#9ca3af;">—</span>';
-            html += '<tr><td>' + (item.item_name || '') + '</td><td>' + item.quantity + ' ' + (item.unit || '') + '</td><td>৳' + (Number(item.price_per_unit) || 0) + '</td><td>৳' + (Number(item.total_price) || 0).toLocaleString('bn-BD') + '</td><td>' + memoCell + '</td></tr>';
+            var qty = Number(item.quantity) || 0;
+            var price = Number(item.price_per_unit) || 0;
+            var total = Number(item.total_price) || (effectiveQtyForTotal(qty) * price);
+            html += '<tr><td>' + (item.item_name || '') + '</td><td>' + item.quantity + ' ' + (item.unit || '') + '</td><td>৳' + price + '</td><td>৳' + (Number.isFinite(total) ? total : 0).toLocaleString('bn-BD') + '</td><td>' + memoCell + '</td></tr>';
         });
         html += '</tbody></table>';
-        html += '<p style="margin-top:12px;"><button type="button" class="btn btn-primary" onclick="closeDetailsModal(); openEditEntry(' + entryId + ')">এডিট করুন</button></p>';
+        if (!fromAdmin) html += '<p style="margin-top:12px;"><button type="button" class="btn btn-primary" onclick="closeDetailsModal(); openEditEntry(' + entryId + ')">এডিট করুন</button></p>';
         document.getElementById('details-modal-body').innerHTML = html;
         document.getElementById('details-modal-overlay').classList.add('show');
     } catch (error) {
@@ -1395,11 +1629,15 @@ function openEditEntry(entryId) {
         tbody.innerHTML = items.map(function (item) {
             var qty = Number(item.quantity) || 0;
             var price = Number(item.price_per_unit) || 0;
-            var total = Number(item.total_price) || (qty * price);
+            var total = Number(item.total_price) || (effectiveQtyForTotal(qty) * price);
             var unitOpts = units.map(function (u) { return '<option value="' + u + '"' + (item.unit === u ? ' selected' : '') + '>' + u + '</option>'; }).join('');
             var catOpts = categories.map(function (c) { return '<option value="' + c + '"' + (item.category === c ? ' selected' : '') + '>' + c + '</option>'; }).join('');
             var memoUrl = item.memo_image_url || '';
-            var memoHtml = memoUrl ? '<span role="button" class="memo-thumb-wrap" data-memo-src="' + escapeHtmlAttr(memoUrl) + '" onclick="viewMemoImage(this.getAttribute(\'data-memo-src\'))" title="মেমো দেখুন"><img src="' + escapeHtmlAttr(memoUrl) + '" alt="" style="max-width:32px;max-height:32px;border-radius:4px;"></span>' : '—';
+            var memoCell = '<input type="file" class="edit-item-memo-file" accept="image/*" hidden onchange="previewEditMemoImage(this)">' +
+                '<button type="button" class="memo-upload-btn" onclick="this.previousElementSibling.click()" title="মেমো ছবি যোগ/বদল">📷</button>' +
+                '<span class="edit-memo-has-pic" style="' + (memoUrl ? '' : 'display:none;') + '">✓</span>' +
+                '<img class="edit-memo-preview" alt="" style="max-width:32px;max-height:32px;border-radius:4px;vertical-align:middle;' + (memoUrl ? 'cursor:pointer;' : 'display:none;') + '" ' + (memoUrl ? 'src="' + escapeHtmlAttr(memoUrl) + '" onclick="viewMemoImage(this.src)"' : '') + '>' +
+                '<input type="hidden" class="edit-item-memo-url" value="' + escapeHtmlAttr(memoUrl) + '">';
             return '<tr>' +
                 '<td><input type="text" class="edit-item-name" value="' + escapeHtmlAttr(item.item_name || '') + '" oninput="calculateEditRow(this)"></td>' +
                 '<td><input type="number" class="edit-item-quantity" value="' + qty + '" step="0.1" min="0" oninput="calculateEditRow(this)"></td>' +
@@ -1407,8 +1645,8 @@ function openEditEntry(entryId) {
                 '<td><input type="number" class="edit-item-price" value="' + price + '" step="0.01" min="0" oninput="calculateEditRow(this)"></td>' +
                 '<td class="calc-cell edit-item-total">৳ ' + total.toLocaleString('bn-BD') + '</td>' +
                 '<td><select class="edit-item-category">' + catOpts + '</select></td>' +
-                '<td class="memo-cell">' + memoHtml + '</td>' +
-                '<td><input type="hidden" class="edit-item-memo-url" value="' + escapeHtmlAttr(memoUrl) + '"><button type="button" class="delete-btn" onclick="deleteEditRow(this)">✕</button></td>' +
+                '<td class="memo-cell">' + memoCell + '</td>' +
+                '<td><button type="button" class="delete-btn" onclick="deleteEditRow(this)">✕</button></td>' +
                 '</tr>';
         }).join('');
         if (tbody.rows.length === 0) addEditRow();
@@ -1426,6 +1664,11 @@ function addEditRow() {
     var categories = ['মুদি', 'সবজি', 'মাছ-মাংস', 'ফলমূল', 'অন্যান্য'];
     var unitOpts = units.map(function (u) { return '<option value="' + u + '">' + u + '</option>'; }).join('');
     var catOpts = categories.map(function (c) { return '<option value="' + c + '">' + c + '</option>'; }).join('');
+    var emptyMemoCell = '<input type="file" class="edit-item-memo-file" accept="image/*" hidden onchange="previewEditMemoImage(this)">' +
+        '<button type="button" class="memo-upload-btn" onclick="this.previousElementSibling.click()" title="মেমো ছবি যোগ করুন">📷</button>' +
+        '<span class="edit-memo-has-pic" style="display:none;">✓</span>' +
+        '<img class="edit-memo-preview" alt="" style="display:none;max-width:32px;max-height:32px;border-radius:4px;vertical-align:middle;">' +
+        '<input type="hidden" class="edit-item-memo-url" value="">';
     var row = '<tr>' +
         '<td><input type="text" class="edit-item-name" placeholder="আইটেম" oninput="calculateEditRow(this)"></td>' +
         '<td><input type="number" class="edit-item-quantity" value="0" step="0.1" min="0" oninput="calculateEditRow(this)"></td>' +
@@ -1433,8 +1676,8 @@ function addEditRow() {
         '<td><input type="number" class="edit-item-price" value="0" step="0.01" min="0" oninput="calculateEditRow(this)"></td>' +
         '<td class="calc-cell edit-item-total">৳ ০</td>' +
         '<td><select class="edit-item-category">' + catOpts + '</select></td>' +
-        '<td class="memo-cell">—</td>' +
-        '<td><input type="hidden" class="edit-item-memo-url" value=""><button type="button" class="delete-btn" onclick="deleteEditRow(this)">✕</button></td>' +
+        '<td class="memo-cell">' + emptyMemoCell + '</td>' +
+        '<td><button type="button" class="delete-btn" onclick="deleteEditRow(this)">✕</button></td>' +
         '</tr>';
     tbody.insertAdjacentHTML('beforeend', row);
     updateEditSummaryTotal();
@@ -1443,10 +1686,13 @@ function addEditRow() {
 function calculateEditRow(input) {
     var tr = input.closest('tr');
     if (!tr) return;
-    var qty = parseFloat(tr.querySelector('.edit-item-quantity').value) || 0;
-    var price = parseFloat(tr.querySelector('.edit-item-price').value) || 0;
-    var total = qty * price;
-    tr.querySelector('.edit-item-total').textContent = '৳ ' + total.toLocaleString('bn-BD');
+    var qtyEl = tr.querySelector('.edit-item-quantity');
+    var priceEl = tr.querySelector('.edit-item-price');
+    var qty = parseEditNumber(qtyEl && qtyEl.value);
+    var price = parseEditNumber(priceEl && priceEl.value);
+    var total = effectiveQtyForTotal(qty) * price;
+    var totalEl = tr.querySelector('.edit-item-total');
+    if (totalEl) totalEl.textContent = '৳ ' + (Number.isFinite(total) ? total : 0).toLocaleString('bn-BD');
     updateEditSummaryTotal();
 }
 
@@ -1460,17 +1706,23 @@ function deleteEditRow(btn) {
 function updateEditSummaryTotal() {
     var total = 0;
     document.querySelectorAll('#edit-items-tbody tr').forEach(function (tr) {
-        var qty = parseFloat(tr.querySelector('.edit-item-quantity') && tr.querySelector('.edit-item-quantity').value) || 0;
-        var price = parseFloat(tr.querySelector('.edit-item-price') && tr.querySelector('.edit-item-price').value) || 0;
-        total += qty * price;
+        var qtyEl = tr.querySelector('.edit-item-quantity');
+        var priceEl = tr.querySelector('.edit-item-price');
+        total += effectiveQtyForTotal(parseEditNumber(qtyEl && qtyEl.value)) * parseEditNumber(priceEl && priceEl.value);
     });
     var el = document.getElementById('edit-summary-total');
-    if (el) el.textContent = total.toLocaleString('bn-BD') + ' টাকা';
+    if (el) el.textContent = (Number.isFinite(total) ? total : 0).toLocaleString('bn-BD') + ' টাকা';
 }
 
 function closeEditEntryModal() {
     document.getElementById('edit-entry-overlay').classList.remove('show');
     editEntryId = null;
+}
+
+function parseEditNumber(val) {
+    if (val === '' || val == null) return 0;
+    var n = parseFloat(String(val).replace(/,/g, '').trim());
+    return Number.isFinite(n) ? n : 0;
 }
 
 async function saveEditedEntry() {
@@ -1482,9 +1734,11 @@ async function saveEditedEntry() {
     rows.forEach(function (tr) {
         var name = (tr.querySelector('.edit-item-name') && tr.querySelector('.edit-item-name').value) || '';
         if (!name.trim()) return;
-        var qty = parseFloat(tr.querySelector('.edit-item-quantity').value) || 0;
-        var price = parseFloat(tr.querySelector('.edit-item-price').value) || 0;
-        var total = qty * price;
+        var qtyInput = tr.querySelector('.edit-item-quantity');
+        var priceInput = tr.querySelector('.edit-item-price');
+        var qty = parseEditNumber(qtyInput && qtyInput.value);
+        var price = parseEditNumber(priceInput && priceInput.value);
+        var total = effectiveQtyForTotal(qty) * price;
         var unit = (tr.querySelector('.edit-item-unit') && tr.querySelector('.edit-item-unit').value) || 'কেজি';
         var category = (tr.querySelector('.edit-item-category') && tr.querySelector('.edit-item-category').value) || 'মুদি';
         var memoUrl = (tr.querySelector('.edit-item-memo-url') && tr.querySelector('.edit-item-memo-url').value) || '';
@@ -1502,19 +1756,20 @@ async function saveEditedEntry() {
         alert('কমপক্ষে একটি আইটেম দিন।');
         return;
     }
-    var newTotal = items.reduce(function (s, it) { return s + it.total_price; }, 0);
+    var newTotal = items.reduce(function (s, it) { return s + (Number(it.total_price) || 0); }, 0);
     try {
         var prev = await storage.getEntryById(editEntryId);
         var previousTotal = Number(prev.entry.total_cost) || 0;
+        var safeTotal = Number.isFinite(newTotal) ? newTotal : 0;
         await storage.updateEntry(editEntryId, {
             entry_date: date,
-            total_cost: newTotal,
+            total_cost: safeTotal,
             item_count: items.length,
             comment: comment,
             payment_status: prev.entry.payment_status || 'pending',
             bill_image_url: prev.entry.bill_image_url || null // Preserve existing bill image
         }, items);
-        await addToEditLog(editEntryId, date, previousTotal, newTotal);
+        await addToEditLog(editEntryId, date, previousTotal, safeTotal);
         closeEditEntryModal();
         loadWorkerEntries();
         loadWorkerDashboard();
@@ -1551,7 +1806,8 @@ async function renderAdminLog() {
             var entryStr = entryDate.length >= 10 ? entryDate.substring(8, 10) + '/' + entryDate.substring(5, 7) + '/' + entryDate.substring(0, 4) : entryDate;
             var editedAt = e.edited_at || '';
             var editedStr = editedAt.length >= 16 ? editedAt.substring(8, 10) + '/' + editedAt.substring(5, 7) + '/' + editedAt.substring(0, 4) + ' ' + editedAt.substring(11, 16) : editedAt;
-            return '<tr><td>' + entryStr + '</td><td>' + editedStr + '</td><td>৳ ' + Number(e.previous_total).toLocaleString('bn-BD') + '</td><td>৳ ' + Number(e.new_total).toLocaleString('bn-BD') + '</td></tr>';
+            var newTotalCell = (e.summary === 'Entry deleted') ? 'ডিলিট হয়েছে' : ('৳ ' + Number(e.new_total).toLocaleString('bn-BD'));
+            return '<tr><td>' + entryStr + '</td><td>' + editedStr + '</td><td>৳ ' + Number(e.previous_total).toLocaleString('bn-BD') + '</td><td>' + newTotalCell + '</td></tr>';
         }).join('');
     }
 }
@@ -1571,11 +1827,12 @@ async function openEditLogModal() {
             if (editedAt.length >= 16) {
                 editedStr = editedAt.substring(8, 10) + '/' + editedAt.substring(5, 7) + '/' + editedAt.substring(0, 4) + ' ' + editedAt.substring(11, 16);
             }
+            var newTotalCell = (e.summary === 'Entry deleted') ? 'ডিলিট হয়েছে' : ('৳ ' + Number(e.new_total).toLocaleString('bn-BD'));
             return '<tr>' +
                 '<td>' + entryStr + '</td>' +
                 '<td>' + editedStr + '</td>' +
                 '<td>৳ ' + Number(e.previous_total).toLocaleString('bn-BD') + '</td>' +
-                '<td>৳ ' + Number(e.new_total).toLocaleString('bn-BD') + '</td>' +
+                '<td>' + newTotalCell + '</td>' +
                 '</tr>';
         }).join('');
     }

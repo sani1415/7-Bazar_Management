@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "description": "Playwright tests for Grocery Management System",
   "scripts": {
-    "build": "node scripts/copy-to-www.js",
-    "copy": "node scripts/copy-to-www.js",
+    "create-bucket": "node scripts/create-memo-bucket.js",
+    "build": "echo App folder is the web app",
     "icons:android": "node scripts/generate-android-icons.js",
     "splash:android": "node scripts/generate-android-splash.js",
     "test": "playwright test",
@@ -14,6 +14,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.40.0",
+    "@supabase/supabase-js": "^2.95.3",
     "sharp": "^0.34.5"
   },
   "dependencies": {
