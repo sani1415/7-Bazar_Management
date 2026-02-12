@@ -26,7 +26,11 @@ The app accepts **CSV** (Comma-Separated Values). Excel can save any sheet as CS
 - You can use **either**:
   - **price_per_unit** (column 5): the app calculates total as `quantity × price_per_unit`, or  
   - **total_price** (column 6): leave price_per_unit empty; the app will **calculate per-unit price** as `total_price ÷ quantity`.
-- **Date** must be in English format: **YYYY-MM-DD** (e.g. `2024-01-15`).
+- **Date** can be in either format:
+  - **Gregorian:** **YYYY-MM-DD** (e.g. `2024-01-15`)
+  - **Hijri:** **DD-MM-YYYY** (e.g. `20-02-1447`). The app converts it to Gregorian for storage.
+
+**Date filter:** All dates are stored as **Gregorian** in the database (Hijri is converted on import). The admin date filter (আজ, এই সপ্তাহ, এই মাস, গত মাস, কাস্টম) uses Gregorian ranges, so it works correctly for every entry—whether you imported with a Gregorian or Hijri date. No mixing issue.
 
 ---
 
@@ -45,11 +49,13 @@ The app accepts **CSV** (Comma-Separated Values). Excel can save any sheet as CS
 ```csv
 entry_date,item_name,quantity,unit,price_per_unit,total_price
 2024-01-15,চাল,5,কেজি,70,
-2024-01-15,ডাল,2,কেজি,120,
-2024-01-15,মাছ,1,কেজি,,450
+20-02-1447,ডাল,2,কেজি,120,
+20-02-1447,মাছ,1,কেজি,,450
 2024-01-16,তেল,1,লিটার,180,
 2024-01-16,পেঁয়াজ,2,কেজি,45,
 ```
+
+You can mix Gregorian (2024-01-15) and Hijri (20-02-1447) dates in the same file.
 
 - Rows 1–2, 4–5: use **price_per_unit** (total is calculated).
 - Row 3: use **total_price** only (450); price_per_unit is left empty.

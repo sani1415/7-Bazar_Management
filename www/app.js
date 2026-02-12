@@ -797,6 +797,33 @@ function viewBillImage() {
     if (src) viewMemoImage(src);
 }
 
+// Normalize CSV import date: accept Gregorian (YYYY-MM-DD) or Hijri (DD-MM-YYYY, year 14xx). Returns YYYY-MM-DD for DB.
+function normalizeImportDate(dateStr) {
+    if (!dateStr || typeof dateStr !== 'string') return dateStr;
+    var s = dateStr.trim();
+    // Hijri: DD-MM-YYYY with year in Hijri range (e.g. 1447)
+    var hijriMatch = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+    if (hijriMatch) {
+        var day = parseInt(hijriMatch[1], 10);
+        var month = parseInt(hijriMatch[2], 10);
+        var year = parseInt(hijriMatch[3], 10);
+        if (year >= 1350 && year <= 1520 && month >= 1 && month <= 12 && day >= 1 && day <= 30) {
+            if (typeof window.hijriToGregorian === 'function') {
+                var g = window.hijriToGregorian(year, month, day);
+                if (g && g.gy != null && g.gm != null && g.gd != null) {
+                    var gy = '' + g.gy;
+                    var gm = g.gm < 10 ? '0' + g.gm : '' + g.gm;
+                    var gd = g.gd < 10 ? '0' + g.gd : '' + g.gd;
+                    return gy + '-' + gm + '-' + gd;
+                }
+            }
+        }
+    }
+    // Already Gregorian YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    return dateStr;
+}
+
 // CSV import for old bills
 function readCsvFile(fileInput) {
     if (!fileInput.files || !fileInput.files[0]) return;
@@ -828,13 +855,12 @@ async function doCsvImport() {
         var parts = lines[i].split(',').map(function (s) { return s.trim().replace(/^["']|["']$/g, ''); });
         if (parts.length < 5) continue; // Minimum 5 columns: date, name, qty, unit, price/unit or total_price
 
-        var entryDate = parts[0];
+        var entryDate = normalizeImportDate(parts[0]);
         var itemName = parts[1];
         var quantity = parseFloat(parts[2]) || 0;
         var unit = (parts[3] || 'কেজি').trim() || 'কেজি';
         var pricePerUnit = parseFloat(parts[4]) || 0;
-        var totalPriceFromFile = parseFloat(parts[5]) || 0; // New: optional total_price from CSV
-        var category = (parts[6] || 'অন্যান্য').trim() || 'অন্যান্য'; // Category is now 7th column
+        var totalPriceFromFile = parseFloat(parts[5]) || 0; // optional total_price from CSV
 
         // Skip header lines (if any) based on content
         if (entryDate.toLowerCase().indexOf('date') >= 0 || itemName.toLowerCase().indexOf('name') >= 0) continue;
@@ -855,10 +881,10 @@ async function doCsvImport() {
             price = 0;
         }
 
-        rows.push({ entry_date: entryDate, item_name: itemName, quantity: quantity, unit: unit, price_per_unit: price, total_price: total, category: category });
+        rows.push({ entry_date: entryDate, item_name: itemName, quantity: quantity, unit: unit, price_per_unit: price, total_price: total, category: 'অন্যান্য' });
     }
     if (rows.length === 0) {
-        resultEl.textContent = 'সঠিক ফরম্যাটের কোনো সারি পাওয়া যায়নি। ফরম্যাট: entry_date,item_name,quantity,unit,price_per_unit,category';
+        resultEl.textContent = 'সঠিক ফরম্যাটের কোনো সারি পাওয়া যায়নি। ফরম্যাট: entry_date,item_name,quantity,unit,price_per_unit,total_price';
         return;
     }
     var byDate = {};
@@ -878,7 +904,7 @@ async function doCsvImport() {
         var date = dates[d];
         var dateRows = byDate[date];
         var items = dateRows.map(function (r) {
-            return { name: r.item_name, quantity: r.quantity, unit: r.unit, price_per_unit: r.price_per_unit, total_price: r.total_price, category: r.category, memo_image_url: null };
+            return { name: r.item_name, quantity: r.quantity, unit: r.unit, price_per_unit: r.price_per_unit, total_price: r.total_price, category: 'অন্যান্য', memo_image_url: null };
         });
         var totalCost = items.reduce(function (s, it) { return s + it.total_price; }, 0);
         try {

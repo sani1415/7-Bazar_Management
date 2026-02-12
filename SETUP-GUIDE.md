@@ -102,7 +102,7 @@ To **upload data** (old bills) into the app, use the **বিল ইমপোর
 | 6      | total_price     | (optional) |
 
 - Use **either** column 5 (price_per_unit) **or** column 6 (total_price); the app will calculate the other (if you give only total, it calculates per-unit automatically).
-- Date must be **YYYY-MM-DD** (e.g. 2024-01-15).
+- Date: **YYYY-MM-DD** (Gregorian, e.g. 2024-01-15) or **DD-MM-YYYY** (Hijri, e.g. 20-02-1447). Both work in CSV import.
 
 A **sample file** is in the project: **`bazar-import-sample.csv`**. Full details: **`docs/CSV-IMPORT-FORMAT.md`**.
 
