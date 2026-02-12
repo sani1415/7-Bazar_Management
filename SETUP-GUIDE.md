@@ -86,6 +86,26 @@ The app can run with **localStorage** (no server) or **Supabase**. Right now it 
   ```
   Change to `false`, save, and refresh the app. Make sure you have run the SQL schema and tables exist.
 
+## CSV / Excel import format (বিল ইমপোর্ট)
+
+To **upload data** (old bills) into the app, use the **বিল ইমপোর্ট** tab. The app imports **CSV** files. You can prepare data in Excel and save as **CSV (Comma delimited)**.
+
+**Columns (in order):**
+
+| Column | Name            | Example    |
+|--------|-----------------|------------|
+| 1      | entry_date      | 2024-01-15 |
+| 2      | item_name       | চাল        |
+| 3      | quantity        | 5          |
+| 4      | unit            | কেজি       |
+| 5      | price_per_unit  | 70         |
+| 6      | total_price     | (optional) |
+
+- Use **either** column 5 (price_per_unit) **or** column 6 (total_price); the app will calculate the other (if you give only total, it calculates per-unit automatically).
+- Date must be **YYYY-MM-DD** (e.g. 2024-01-15).
+
+A **sample file** is in the project: **`bazar-import-sample.csv`**. Full details: **`docs/CSV-IMPORT-FORMAT.md`**.
+
 ## Next Steps (Optional)
 
 - Add image upload functionality

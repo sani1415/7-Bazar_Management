@@ -833,8 +833,7 @@ async function doCsvImport() {
         var quantity = parseFloat(parts[2]) || 0;
         var unit = (parts[3] || 'কেজি').trim() || 'কেজি';
         var pricePerUnit = parseFloat(parts[4]) || 0;
-        var totalPriceFromFile = parseFloat(parts[5]) || 0; // New: optional total_price from CSV
-        var category = (parts[6] || 'অন্যান্য').trim() || 'অন্যান্য'; // Category is now 7th column
+        var totalPriceFromFile = parseFloat(parts[5]) || 0; // optional total_price from CSV
 
         // Skip header lines (if any) based on content
         if (entryDate.toLowerCase().indexOf('date') >= 0 || itemName.toLowerCase().indexOf('name') >= 0) continue;
@@ -855,10 +854,10 @@ async function doCsvImport() {
             price = 0;
         }
 
-        rows.push({ entry_date: entryDate, item_name: itemName, quantity: quantity, unit: unit, price_per_unit: price, total_price: total, category: category });
+        rows.push({ entry_date: entryDate, item_name: itemName, quantity: quantity, unit: unit, price_per_unit: price, total_price: total, category: 'অন্যান্য' });
     }
     if (rows.length === 0) {
-        resultEl.textContent = 'সঠিক ফরম্যাটের কোনো সারি পাওয়া যায়নি। ফরম্যাট: entry_date,item_name,quantity,unit,price_per_unit,category';
+        resultEl.textContent = 'সঠিক ফরম্যাটের কোনো সারি পাওয়া যায়নি। ফরম্যাট: entry_date,item_name,quantity,unit,price_per_unit,total_price';
         return;
     }
     var byDate = {};
@@ -878,7 +877,7 @@ async function doCsvImport() {
         var date = dates[d];
         var dateRows = byDate[date];
         var items = dateRows.map(function (r) {
-            return { name: r.item_name, quantity: r.quantity, unit: r.unit, price_per_unit: r.price_per_unit, total_price: r.total_price, category: r.category, memo_image_url: null };
+            return { name: r.item_name, quantity: r.quantity, unit: r.unit, price_per_unit: r.price_per_unit, total_price: r.total_price, category: 'অন্যান্য', memo_image_url: null };
         });
         var totalCost = items.reduce(function (s, it) { return s + it.total_price; }, 0);
         try {

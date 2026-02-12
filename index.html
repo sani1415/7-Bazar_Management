@@ -217,8 +217,8 @@
                 <p style="margin-bottom:12px; font-size: 13px; color: var(--text-muted, #6b7280);">শত শত পুরনো বিল একসাথে যোগ করতে CSV পেস্ট বা ফাইল আপলোড করুন। একই তারিখের সব সারি একই এন্ট্রিতে যাবে। তারিখ ইংরেজি ফরম্যাটে দিন (YYYY-MM-DD), যেমন 2024-01-15।</p>
                 <div class="form-group">
                     <label>CSV ফরম্যাট (প্রথম লাইন হেডার থাকলে সেটা বাদ দেওয়া হবে)</label>
-                    <p style="font-size:12px; margin-bottom:6px;">entry_date,item_name,quantity,unit,price_per_unit,total_price,category (total_price বা price_per_unit যেকোন একটি দিলেই হবে)</p>
-                    <p style="font-size:12px; margin-bottom:8px;">উদাহরণ: 2024-01-15,চাল,5,কেজি,70,,মুদি &nbsp;|&nbsp; 2024-01-15,মাছ,1,পিস,,450,মাছ-মাংস</p>
+                    <p style="font-size:12px; margin-bottom:6px;">entry_date,item_name,quantity,unit,price_per_unit,total_price — যেকোন একটি দিলেই হবে। শুধু মোট দাম (total_price) দিলে অ্যাপ প্রতি ইউনিট দাম নিজে হিসাব করবে।</p>
+                    <p style="font-size:12px; margin-bottom:8px;">উদাহরণ: 2024-01-15,চাল,5,কেজি,70, &nbsp;|&nbsp; 2024-01-15,মাছ,1,পিস,,450 (এখানে ৪৫০ মোট; প্রতি ইউনিট অটো)</p>
                     <textarea id="csv-import-text" rows="8" placeholder="এখানে CSV পেস্ট করুন অথবা নিচে ফাইল চয়ন করুন..." style="width:100%; padding:10px; border-radius:6px; border:1px solid var(--border); font-family: inherit;"></textarea>
                     <input type="file" id="csv-import-file" accept=".csv,.txt" style="margin-top:8px;" onchange="readCsvFile(this)">
                 </div>
