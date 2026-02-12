@@ -1,7 +1,7 @@
 /* বাজার ম্যানেজমেন্ট - App logic. Requires Supabase script loaded first. */
 
 // ---------- STORAGE MODE: switch to Supabase when ready ----------
-const USE_LOCAL_STORAGE = true;  // Set to false when you want to use Supabase
+const USE_LOCAL_STORAGE = false;  // Set to false when you want to use Supabase
 
 // Initialize Supabase (used only when USE_LOCAL_STORAGE is false)
 const SUPABASE_URL = 'https://vdzpvgmgjbbdezqbovrk.supabase.co';
