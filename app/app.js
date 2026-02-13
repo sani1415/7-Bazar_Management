@@ -649,7 +649,7 @@ async function renderBalanceStatementContent(filterValue) {
         '<p style="margin-bottom:6px;"><strong>সর্বমোট দিয়েছেন:</strong> ৳ ' + totalAdded.toLocaleString('bn-BD') + '</p>' +
         '<p style="margin-bottom:6px;"><strong>মোট বাজার খরচ (সব এন্ট্রি):</strong> ৳ ' + totalSpent.toLocaleString('bn-BD') + '</p>' +
         '<p style="margin-bottom:0; font-weight:600; font-size:1.05rem;">' +
-        (balance >= 0 ? 'বাজারকারীর হাতে টাকা: ৳ ' : 'বাকি: -৳ ') + Math.abs(balance).toLocaleString('bn-BD') + '</p>';
+        (balance >= 0 ? 'বাজারকারীর হাতে টাকা: ৳ ' : 'আপনি দিতে বাকি: -৳ ') + Math.abs(balance).toLocaleString('bn-BD') + '</p>';
 }
 
 
@@ -684,6 +684,7 @@ function switchView(view) {
         switchAdminTab('entries');
         loadAdminData();
         updateBalanceUI();
+        loadAdminItemDropdown();
     }
 }
 
@@ -1149,6 +1150,15 @@ function previewMemoImage(fileInput) {
     }
 }
 
+// Escape string for safe use inside HTML (text content)
+function escapeHtml(str) {
+    if (str == null) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
 // Escape string for safe use inside an HTML attribute
 function escapeHtmlAttr(str) {
     if (str == null) return '';
@@ -1443,32 +1453,133 @@ function applyAdminDateFilterVisibility() {
     if (wrap) wrap.style.display = (sel && sel.value === 'custom') ? 'inline-flex' : 'none';
 }
 
-// Load admin data (with date, category, search filters)
+// All unique item names from past entries, sorted by Bengali alphabet
+async function getPastItemNamesSortedBengali() {
+    var items = [];
+    if (USE_LOCAL_STORAGE) {
+        var entries = localStorageAdapter._getEntries();
+        var allItems = localStorageAdapter._getItems();
+        var ids = (entries || []).map(function (e) { return e.id; });
+        items = (allItems || []).filter(function (it) { return ids.indexOf(it.entry_id) >= 0; });
+    } else {
+        items = await storage.getItemsInDateRange('2000-01-01', '2099-12-31');
+    }
+    var names = [];
+    var seen = {};
+    (items || []).forEach(function (it) {
+        var name = (it.item_name || '').trim();
+        if (name && !seen[name]) { seen[name] = true; names.push(name); }
+    });
+    names.sort(function (a, b) { return a.localeCompare(b, 'bn'); });
+    return names;
+}
+
+var _cachedPastItemNames = null;
+
+async function loadAdminItemDropdown() {
+    var sel = document.getElementById('admin-filter-item');
+    if (!sel) return;
+    var list = await getPastItemNamesSortedBengali();
+    _cachedPastItemNames = list;
+    var currentVal = sel.value;
+    sel.innerHTML = '<option value="">আইটেম দিয়ে ফিল্টার</option>';
+    list.forEach(function (name) {
+        var opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        sel.appendChild(opt);
+    });
+    if (currentVal && list.indexOf(currentVal) >= 0) sel.value = currentVal;
+}
+
+function onAdminItemFilterChange() {
+    var sel = document.getElementById('admin-filter-item');
+    var searchEl = document.getElementById('admin-filter-search');
+    if (sel && searchEl) {
+        searchEl.value = sel.value || '';
+        loadAdminData();
+    }
+}
+
+function onAdminSearchInput() {
+    var input = document.getElementById('admin-filter-search');
+    var listEl = document.getElementById('admin-search-suggestions');
+    if (!input || !listEl) return;
+    var q = (input.value || '').trim().toLowerCase();
+    var list = _cachedPastItemNames || [];
+    if (list.length === 0) { listEl.style.display = 'none'; return; }
+    var filtered = q ? list.filter(function (n) { return n.toLowerCase().indexOf(q) >= 0; }) : list.slice(0, 20);
+    if (filtered.length === 0) { listEl.style.display = 'none'; return; }
+    listEl.innerHTML = filtered.slice(0, 15).map(function (name) {
+        return '<div class="admin-search-suggestion-item" role="button" tabindex="0">' + escapeHtml(name) + '</div>';
+    }).join('');
+    listEl.style.display = 'block';
+    listEl.querySelectorAll('.admin-search-suggestion-item').forEach(function (el) {
+        el.addEventListener('click', function () {
+            input.value = el.textContent;
+            listEl.style.display = 'none';
+            loadAdminData();
+        });
+    });
+}
+
+function onAdminSearchFocus() {
+    if (_cachedPastItemNames && _cachedPastItemNames.length > 0) {
+        var input = document.getElementById('admin-filter-search');
+        var listEl = document.getElementById('admin-search-suggestions');
+        if (input && listEl) {
+            var q = (input.value || '').trim().toLowerCase();
+            var filtered = q ? _cachedPastItemNames.filter(function (n) { return n.toLowerCase().indexOf(q) >= 0; }) : _cachedPastItemNames.slice(0, 15);
+            listEl.innerHTML = filtered.map(function (name) {
+                return '<div class="admin-search-suggestion-item" role="button" tabindex="0">' + escapeHtml(name) + '</div>';
+            }).join('');
+            listEl.style.display = filtered.length ? 'block' : 'none';
+            listEl.querySelectorAll('.admin-search-suggestion-item').forEach(function (el) {
+                el.addEventListener('click', function () {
+                    input.value = el.textContent;
+                    listEl.style.display = 'none';
+                    loadAdminData();
+                });
+            });
+        }
+    }
+}
+
+document.addEventListener('click', function (e) {
+    var wrap = document.querySelector('.admin-search-wrap');
+    var list = document.getElementById('admin-search-suggestions');
+    if (list && wrap && !wrap.contains(e.target)) list.style.display = 'none';
+});
+
+// Load admin data (with date and search filters)
 async function loadAdminData() {
     var tbody = document.getElementById('entries-tbody');
     if (!tbody) return;
     try {
         var range = getAdminDateRange();
-        var category = (document.getElementById('admin-filter-category') && document.getElementById('admin-filter-category').value) || '';
         var searchText = (document.getElementById('admin-filter-search') && document.getElementById('admin-filter-search').value.trim()) || '';
 
         var entries = await storage.getEntriesInDateRange(range.start, range.end);
         if (!entries) entries = [];
 
-        if (USE_LOCAL_STORAGE && (category || searchText)) {
-            var allItems = localStorageAdapter._getItems();
-            entries = entries.map(function (e) {
-                return { ...e, _items: allItems.filter(function (it) { return it.entry_id === e.id; }) };
-            });
-            if (category) entries = entries.filter(function (e) { return (e._items || []).some(function (it) { return it.category === category; }); });
-            if (searchText) {
-                var q = searchText.toLowerCase();
-                entries = entries.filter(function (e) {
-                    var matchItem = (e._items || []).some(function (it) { return (it.item_name || '').toLowerCase().indexOf(q) >= 0; });
-                    var matchComment = (e.comment || '').toLowerCase().indexOf(q) >= 0;
-                    return matchItem || matchComment;
-                });
+        var attachItems = function (e) {
+            var items = e.grocery_items || e._items || [];
+            if (items.length) return e;
+            if (USE_LOCAL_STORAGE) {
+                var allItems = localStorageAdapter._getItems();
+                e._items = allItems.filter(function (it) { return it.entry_id === e.id; });
             }
+            return e;
+        };
+        if (searchText) {
+            entries = entries.map(attachItems);
+            var q = searchText.toLowerCase();
+            entries = entries.filter(function (e) {
+                var items = e.grocery_items || e._items || [];
+                var matchItem = items.some(function (it) { return (it.item_name || '').toLowerCase().indexOf(q) >= 0; });
+                var matchComment = (e.comment || '').toLowerCase().indexOf(q) >= 0;
+                return matchItem || matchComment;
+            });
         }
 
         if (entries.length > 0) {
@@ -1790,7 +1901,10 @@ function switchAdminTab(tabName) {
         var id = p.id;
         p.classList.toggle('active', (tabName === 'entries' && id === 'admin-panel-entries') || (tabName === 'log' && id === 'admin-panel-log'));
     });
-    if (tabName === 'entries') loadAdminData();
+    if (tabName === 'entries') {
+        loadAdminData();
+        if (!_cachedPastItemNames) loadAdminItemDropdown();
+    }
     if (tabName === 'log') renderAdminLog();
 }
 

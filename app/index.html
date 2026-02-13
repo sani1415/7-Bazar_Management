@@ -319,15 +319,14 @@
                             <input type="date" id="admin-date-from" title="শুরুর তারিখ">
                             <input type="date" id="admin-date-to" title="শেষ তারিখ">
                         </span>
-                        <select id="admin-filter-category" onchange="loadAdminData()">
-                            <option value="">সব ক্যাটাগরি</option>
-                            <option value="মুদি">মুদি</option>
-                            <option value="সবজি">সবজি</option>
-                            <option value="মাছ-মাংস">মাছ-মাংস</option>
-                            <option value="ফলমূল">ফলমূল</option>
-                            <option value="অন্যান্য">অন্যান্য</option>
+                        <select id="admin-filter-item" onchange="onAdminItemFilterChange()" title="পুরনো আইটেম দিয়ে ফিল্টার">
+                            <option value="">আইটেম দিয়ে ফিল্টার</option>
                         </select>
-                        <input type="text" id="admin-filter-search" placeholder="আইটেম বা মন্তব্য সার্চ..." onkeypress="if(event.key==='Enter') loadAdminData();">
+                        <div class="admin-search-wrap" style="position:relative;">
+                            <input type="text" id="admin-filter-search" placeholder="আইটেম বা মন্তব্য সার্চ..." autocomplete="off"
+                                onkeypress="if(event.key==='Enter') loadAdminData();" oninput="onAdminSearchInput()" onfocus="onAdminSearchFocus()">
+                            <div id="admin-search-suggestions" class="admin-search-suggestions" style="display:none;"></div>
+                        </div>
                         <button type="button" class="btn btn-primary" onclick="loadAdminData()">🔍 প্রয়োগ করুন</button>
                     </div>
                 </div>
