@@ -1479,17 +1479,79 @@ var _cachedPastItemNames = null;
 async function loadAdminItemDropdown() {
     var sel = document.getElementById('admin-filter-item');
     if (!sel) return;
-    var list = await getPastItemNamesSortedBengali();
-    _cachedPastItemNames = list;
+    var list = [];
+    try {
+        list = await getPastItemNamesSortedBengali();
+    } catch (err) {
+        console.warn('loadAdminItemDropdown: getPastItemNames failed', err);
+    }
+    if (list && list.length > 0) _cachedPastItemNames = list;
     var currentVal = sel.value;
     sel.innerHTML = '<option value="">আইটেম দিয়ে ফিল্টার</option>';
-    list.forEach(function (name) {
+    (list || []).forEach(function (name) {
         var opt = document.createElement('option');
         opt.value = name;
         opt.textContent = name;
         sel.appendChild(opt);
     });
-    if (currentVal && list.indexOf(currentVal) >= 0) sel.value = currentVal;
+    if (currentVal && list && list.indexOf(currentVal) >= 0) sel.value = currentVal;
+}
+
+function populateAdminItemDropdownFromEntries(entries) {
+    var sel = document.getElementById('admin-filter-item');
+    if (!sel || !entries || entries.length === 0) return;
+    var names = [];
+    var seen = {};
+    entries.forEach(function (e) {
+        (e._items || []).forEach(function (it) {
+            var name = (it.item_name || '').trim();
+            if (name && !seen[name]) { seen[name] = true; names.push(name); }
+        });
+    });
+    if (names.length === 0) return;
+    names.sort(function (a, b) { return a.localeCompare(b, 'bn'); });
+    if (!_cachedPastItemNames) _cachedPastItemNames = [];
+    names.forEach(function (n) {
+        if (_cachedPastItemNames.indexOf(n) < 0) _cachedPastItemNames.push(n);
+    });
+    _cachedPastItemNames.sort(function (a, b) { return a.localeCompare(b, 'bn'); });
+    if (sel.options.length <= 1) {
+        var currentVal = sel.value;
+        sel.innerHTML = '<option value="">আইটেম দিয়ে ফিল্টার</option>';
+        _cachedPastItemNames.forEach(function (name) {
+            var opt = document.createElement('option');
+            opt.value = name;
+            opt.textContent = name;
+            sel.appendChild(opt);
+        });
+        if (currentVal && _cachedPastItemNames.indexOf(currentVal) >= 0) sel.value = currentVal;
+    }
+}
+
+function onAdminItemFilterFocus() {
+    var sel = document.getElementById('admin-filter-item');
+    if (!sel) return;
+    if (sel.options.length <= 1) loadAdminItemDropdown();
+}
+
+function updateAdminSearchClearVisibility() {
+    var wrap = document.querySelector('.admin-search-wrap');
+    var input = document.getElementById('admin-filter-search');
+    if (wrap && input) wrap.classList.toggle('has-search', (input.value || '').trim().length > 0);
+}
+
+function clearAdminSearch() {
+    var input = document.getElementById('admin-filter-search');
+    var itemSel = document.getElementById('admin-filter-item');
+    var listEl = document.getElementById('admin-search-suggestions');
+    if (input) {
+        input.value = '';
+        input.focus();
+    }
+    if (itemSel) itemSel.value = '';
+    if (listEl) listEl.style.display = 'none';
+    updateAdminSearchClearVisibility();
+    loadAdminData();
 }
 
 function onAdminItemFilterChange() {
@@ -1497,6 +1559,7 @@ function onAdminItemFilterChange() {
     var searchEl = document.getElementById('admin-filter-search');
     if (sel && searchEl) {
         searchEl.value = sel.value || '';
+        updateAdminSearchClearVisibility();
         loadAdminData();
     }
 }
@@ -1518,6 +1581,7 @@ function onAdminSearchInput() {
         el.addEventListener('click', function () {
             input.value = el.textContent;
             listEl.style.display = 'none';
+            updateAdminSearchClearVisibility();
             loadAdminData();
         });
     });
@@ -1538,11 +1602,13 @@ function onAdminSearchFocus() {
                 el.addEventListener('click', function () {
                     input.value = el.textContent;
                     listEl.style.display = 'none';
+                    updateAdminSearchClearVisibility();
                     loadAdminData();
                 });
             });
         }
     }
+    updateAdminSearchClearVisibility();
 }
 
 document.addEventListener('click', function (e) {
@@ -1557,25 +1623,28 @@ async function loadAdminData() {
     if (!tbody) return;
     try {
         var range = getAdminDateRange();
-        var searchText = (document.getElementById('admin-filter-search') && document.getElementById('admin-filter-search').value.trim()) || '';
+        var searchEl = document.getElementById('admin-filter-search');
+        var searchText = (searchEl && searchEl.value && searchEl.value.trim()) || '';
 
         var entries = await storage.getEntriesInDateRange(range.start, range.end);
         if (!entries) entries = [];
 
         var attachItems = function (e) {
             var items = e.grocery_items || e._items || [];
-            if (items.length) return e;
-            if (USE_LOCAL_STORAGE) {
+            if (!items.length && USE_LOCAL_STORAGE) {
                 var allItems = localStorageAdapter._getItems();
-                e._items = allItems.filter(function (it) { return it.entry_id === e.id; });
+                items = allItems.filter(function (it) { return it.entry_id === e.id; });
             }
+            e._items = Array.isArray(items) ? items : [];
             return e;
         };
+        entries = entries.map(attachItems);
+        populateAdminItemDropdownFromEntries(entries);
+
         if (searchText) {
-            entries = entries.map(attachItems);
             var q = searchText.toLowerCase();
             entries = entries.filter(function (e) {
-                var items = e.grocery_items || e._items || [];
+                var items = e._items || [];
                 var matchItem = items.some(function (it) { return (it.item_name || '').toLowerCase().indexOf(q) >= 0; });
                 var matchComment = (e.comment || '').toLowerCase().indexOf(q) >= 0;
                 return matchItem || matchComment;
@@ -1584,7 +1653,7 @@ async function loadAdminData() {
 
         if (entries.length > 0) {
             tbody.innerHTML = entries.map(function (entry) {
-                var items = entry.grocery_items || entry._items || [];
+                var items = entry._items || [];
                 var memoCount = items.filter(function (it) { return it.memo_image_url; }).length;
                 var memoBadge = memoCount > 0 ? '<span class="memo-badge" title="এই এন্ট্রিতে ' + memoCount + 'টি আইটেমের মেমো ছবি আছে">📷 ' + memoCount + '</span>' : '';
                 return '<tr>' +

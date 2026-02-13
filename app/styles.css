@@ -412,6 +412,40 @@ input:focus, select:focus, textarea:focus {
 .admin-search-wrap {
     flex: 1;
     min-width: 180px;
+    position: relative;
+}
+
+#admin-filter-search {
+    padding-right: 32px;
+}
+
+.admin-search-clear {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 26px;
+    height: 26px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 20px;
+    line-height: 1;
+    color: var(--text-muted, #6b7280);
+    border-radius: 4px;
+    display: none;
+    padding: 0;
+    align-items: center;
+    justify-content: center;
+}
+
+.admin-search-wrap.has-search .admin-search-clear {
+    display: flex;
+}
+
+.admin-search-clear:hover {
+    color: var(--danger, #b91c1c);
+    background: rgba(0,0,0,0.06);
 }
 
 .admin-search-suggestions {

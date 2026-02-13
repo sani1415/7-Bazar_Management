@@ -319,12 +319,13 @@
                             <input type="date" id="admin-date-from" title="শুরুর তারিখ">
                             <input type="date" id="admin-date-to" title="শেষ তারিখ">
                         </span>
-                        <select id="admin-filter-item" onchange="onAdminItemFilterChange()" title="পুরনো আইটেম দিয়ে ফিল্টার">
+                        <select id="admin-filter-item" onchange="onAdminItemFilterChange()" onfocus="onAdminItemFilterFocus()" title="পুরনো আইটেম দিয়ে ফিল্টার">
                             <option value="">আইটেম দিয়ে ফিল্টার</option>
                         </select>
                         <div class="admin-search-wrap" style="position:relative;">
                             <input type="text" id="admin-filter-search" placeholder="আইটেম বা মন্তব্য সার্চ..." autocomplete="off"
-                                onkeypress="if(event.key==='Enter') loadAdminData();" oninput="onAdminSearchInput()" onfocus="onAdminSearchFocus()">
+                                onkeypress="if(event.key==='Enter') loadAdminData();" oninput="onAdminSearchInput(); updateAdminSearchClearVisibility();" onfocus="onAdminSearchFocus()">
+                            <button type="button" class="admin-search-clear" id="admin-search-clear" onclick="clearAdminSearch()" title="সার্চ ক্লিয়ার করুন" aria-label="Clear search">×</button>
                             <div id="admin-search-suggestions" class="admin-search-suggestions" style="display:none;"></div>
                         </div>
                         <button type="button" class="btn btn-primary" onclick="loadAdminData()">🔍 প্রয়োগ করুন</button>
