@@ -84,23 +84,9 @@
 
             <div id="worker-panel-new" class="worker-tab-panel active">
             <div class="card">
-                <div class="card-title">নতুন বাজার এন্ট্রি</div>
-
-                <div class="form-group">
-                    <label>তারিখ</label>
-                    <input type="date" id="entry-date" value="">
-                </div>
-
-                <div class="form-group">
-                    <label>বিল/চালানের ছবি (ঐচ্ছিক)</label>
-                    <div class="bill-image-wrap">
-                        <input type="file" id="entry-bill-image" accept="image/*" hidden onchange="previewBillImage(this)">
-                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('entry-bill-image').click()">বিলের ছবি নির্বাচন করুন</button>
-                        <span id="entry-bill-preview-wrap" style="display:none;">
-                            <img id="entry-bill-preview" alt="বিল" style="max-width:120px;max-height:80px;border-radius:6px;cursor:pointer;" onclick="viewBillImage()" title="বড় দেখুন">
-                            <button type="button" class="btn btn-secondary" style="margin-left:6px;" onclick="clearBillImage()">মুছুন</button>
-                        </span>
-                    </div>
+                <div class="new-entry-header">
+                    <span class="new-entry-title">নতুন</span>
+                    <input type="date" id="entry-date" class="entry-date-inline" value="" title="তারিখ">
                 </div>
 
                 <div class="form-group">

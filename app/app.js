@@ -1348,8 +1348,6 @@ async function saveEntry() {
         }, items, billFile); // Pass raw file for Supabase to upload
 
         alert('✅ এন্ট্রি সফলভাবে সেভ হয়েছে!');
-
-        alert('✅ এন্ট্রি সফলভাবে সেভ হয়েছে!');
         clearBillImage();
         updateBalanceUI();
         loadWorkerDashboard();
