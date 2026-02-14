@@ -676,7 +676,8 @@ function switchView(view) {
         if (tw) tw.classList.add('active');
         loadWorkerDashboard();
         loadWorkerEntries();
-        switchWorkerTab('new');
+        switchWorkerTab('list');
+        populateNewEntryItemList();
     } else {
         document.getElementById('admin-view').classList.add('active');
         var ta = document.getElementById('toggle-admin');
@@ -782,10 +783,32 @@ function switchWorkerTab(tabName) {
     });
     document.querySelectorAll('.worker-tab-panel').forEach(function (p) {
         var id = p.id;
-        p.classList.toggle('active', (tabName === 'new' && id === 'worker-panel-new') || (tabName === 'list' && id === 'worker-panel-list') || (tabName === 'log' && id === 'worker-panel-log') || (tabName === 'import' && id === 'worker-panel-import'));
+        p.classList.toggle('active', (tabName === 'list' && id === 'worker-panel-list') || (tabName === 'log' && id === 'worker-panel-log') || (tabName === 'import' && id === 'worker-panel-import'));
     });
     if (tabName === 'list') loadWorkerEntries();
     if (tabName === 'log') renderWorkerLog();
+}
+
+function openNewEntryModal() {
+    /* New entry form is now inline on worker home; no modal */
+}
+function closeNewEntryModal() {
+    var overlay = document.getElementById('new-entry-modal-overlay');
+    if (overlay) overlay.style.display = 'none';
+}
+
+async function populateNewEntryItemList() {
+    var listEl = document.getElementById('new-entry-item-list');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    try {
+        var names = await getPastItemNamesSortedBengali();
+        (names || []).forEach(function (name) {
+            var opt = document.createElement('option');
+            opt.value = name;
+            listEl.appendChild(opt);
+        });
+    } catch (e) { console.warn('populateNewEntryItemList:', e); }
 }
 
 async function renderWorkerLog() {
@@ -806,48 +829,18 @@ async function renderWorkerLog() {
     }
 }
 
-// Add new row to table
+// Add new row to table (matches details-style modal layout)
 function addNewRow() {
     const tbody = document.getElementById('items-tbody');
     const row = document.createElement('tr');
     row.innerHTML = `
-        <td>
-            <input type="text" class="item-name" placeholder="আইটেম লিখুন..." oninput="calculateRow(this)">
-        </td>
-        <td>
-            <input type="number" class="item-quantity" value="0" step="0.1" min="0" oninput="calculateRow(this)">
-        </td>
-        <td>
-            <select class="item-unit" onchange="calculateRow(this)">
-                <option>কেজি</option>
-                <option>পিস</option>
-                <option>লিটার</option>
-                <option>গ্রাম</option>
-                <option>হালি</option>
-            </select>
-        </td>
-        <td>
-            <input type="number" class="item-price" value="0" step="0.01" min="0" oninput="calculateRow(this)">
-        </td>
-        <td class="calc-cell item-total">০ টাকা</td>
-        <td>
-            <select class="item-category">
-                <option>মুদি</option>
-                <option>সবজি</option>
-                <option>মাছ-মাংস</option>
-                <option>ফলমূল</option>
-                <option>অন্যান্য</option>
-            </select>
-        </td>
-        <td class="memo-cell">
-            <input type="file" class="item-memo-file" accept="image/*" hidden onchange="previewMemoImage(this)">
-            <button type="button" class="memo-upload-btn" onclick="this.previousElementSibling.click()" title="এই আইটেমের মেমো ছবি">📷</button>
-            <span class="memo-has-pic" style="display:none;">✓</span>
-            <img class="memo-preview" alt="" style="display:none; max-width:32px; max-height:32px; border-radius:4px; vertical-align:middle;">
-        </td>
-        <td style="text-align: center;">
-            <button class="delete-btn" onclick="deleteRow(this)">✕</button>
-        </td>
+        <td><input type="text" class="item-name" list="new-entry-item-list" placeholder="নাম..." oninput="calculateRow(this)" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;"></td>
+        <td><input type="number" class="item-quantity" value="0" step="0.1" min="0" oninput="calculateRow(this)" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;"></td>
+        <td><select class="item-unit" onchange="calculateRow(this)" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;"><option>কেজি</option><option>পিস</option><option>লিটার</option><option>গ্রাম</option><option>হালি</option></select></td>
+        <td><input type="number" class="item-price" value="0" step="0.01" min="0" oninput="calculateRow(this)" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;"></td>
+        <td class="calc-cell item-total">০</td>
+        <td class="memo-cell"><input type="file" class="item-memo-file" accept="image/*" hidden onchange="previewMemoImage(this)"><button type="button" class="memo-upload-btn" onclick="this.previousElementSibling.click()" title="মেমো ছবি">📷</button><span class="memo-has-pic" style="display:none;">✓</span><img class="memo-preview" alt="" style="display:none;max-width:28px;max-height:28px;border-radius:4px;vertical-align:middle;"></td>
+        <td><button type="button" class="delete-btn" onclick="deleteRow(this)">✕</button><input type="hidden" class="item-category" value="অন্যান্য"></td>
     `;
     tbody.appendChild(row);
 }
@@ -1351,47 +1344,18 @@ async function saveEntry() {
         clearBillImage();
         updateBalanceUI();
         loadWorkerDashboard();
+        loadWorkerEntries();
         document.getElementById('entry-date').value = new Date().toISOString().split('T')[0];
         document.getElementById('entry-comment').value = '';
         document.getElementById('items-tbody').innerHTML = `
             <tr>
-                <td>
-                    <input type="text" class="item-name" placeholder="আইটেম লিখুন..." oninput="calculateRow(this)">
-                </td>
-                <td>
-                    <input type="number" class="item-quantity" value="0" step="0.1" min="0" oninput="calculateRow(this)">
-                </td>
-                <td>
-                    <select class="item-unit" onchange="calculateRow(this)">
-                        <option>কেজি</option>
-                        <option>পিস</option>
-                        <option>লিটার</option>
-                        <option>গ্রাম</option>
-                        <option>হালি</option>
-                    </select>
-                </td>
-                <td>
-                    <input type="number" class="item-price" value="0" step="0.01" min="0" oninput="calculateRow(this)">
-                </td>
-                <td class="calc-cell item-total">০ টাকা</td>
-                <td>
-                    <select class="item-category">
-                        <option>মুদি</option>
-                        <option>সবজি</option>
-                        <option>মাছ-মাংস</option>
-                        <option>ফলমূল</option>
-                        <option>অন্যান্য</option>
-                    </select>
-                </td>
-                <td class="memo-cell">
-                    <input type="file" class="item-memo-file" accept="image/*" hidden onchange="previewMemoImage(this)">
-                    <button type="button" class="memo-upload-btn" onclick="this.previousElementSibling.click()" title="এই আইটেমের মেমো ছবি">📷</button>
-                    <span class="memo-has-pic" style="display:none;">✓</span>
-                    <img class="memo-preview" alt="" style="display:none; max-width:32px; max-height:32px; border-radius:4px; vertical-align:middle;">
-                </td>
-                <td style="text-align: center;">
-                    <button class="delete-btn" onclick="deleteRow(this)">✕</button>
-                </td>
+                <td><input type="text" class="item-name" list="new-entry-item-list" placeholder="নাম..." oninput="calculateRow(this)" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;"></td>
+                <td><input type="number" class="item-quantity" value="0" step="0.1" min="0" oninput="calculateRow(this)" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;"></td>
+                <td><select class="item-unit" onchange="calculateRow(this)" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;"><option>কেজি</option><option>পিস</option><option>লিটার</option><option>গ্রাম</option><option>হালি</option></select></td>
+                <td><input type="number" class="item-price" value="0" step="0.01" min="0" oninput="calculateRow(this)" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;"></td>
+                <td class="calc-cell item-total">০</td>
+                <td class="memo-cell"><input type="file" class="item-memo-file" accept="image/*" hidden onchange="previewMemoImage(this)"><button type="button" class="memo-upload-btn" onclick="this.previousElementSibling.click()" title="মেমো ছবি">📷</button><span class="memo-has-pic" style="display:none;">✓</span><img class="memo-preview" alt="" style="display:none;max-width:28px;max-height:28px;border-radius:4px;vertical-align:middle;"></td>
+                <td><button type="button" class="delete-btn" onclick="deleteRow(this)">✕</button><input type="hidden" class="item-category" value="অন্যান্য"></td>
             </tr>
         `;
         updateSummary();

@@ -138,19 +138,17 @@ body {
     border-bottom: 1px solid var(--border-light);
 }
 
-.new-entry-header {
+.common-items-header {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 12px;
-    margin-bottom: 20px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid var(--border-light);
+    flex-wrap: wrap;
+    margin-bottom: 8px;
 }
 
-.new-entry-title {
-    font-size: 20px;
-    font-weight: bold;
-    color: var(--text);
+.common-items-label {
+    margin-bottom: 0;
 }
 
 .entry-date-inline {
@@ -646,8 +644,42 @@ input:focus, select:focus, textarea:focus {
 .worker-recent-card {
     margin-bottom: 16px;
 }
+.card-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+.card-title-row .card-title {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+.btn-new-entry {
+    padding: 6px 12px;
+    font-size: 13px;
+    white-space: nowrap;
+}
 .worker-recent-card .card-title {
     margin-bottom: 8px;
+}
+
+.new-entry-section {
+    margin-bottom: 20px;
+}
+.new-entry-heading {
+    text-align: center;
+    font-size: 1.35rem;
+    font-weight: bold;
+    color: var(--text);
+    margin-bottom: 16px;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+.new-entry-form {
+    padding: 0 4px;
 }
 .worker-recent-table-wrap {
     overflow-x: auto;
@@ -773,6 +805,8 @@ input:focus, select:focus, textarea:focus {
     align-items: center;
 }
 .details-modal-body { padding: 20px; overflow-y: auto; max-height: 60vh; color: var(--text); }
+.new-entry-modal { max-width: 96%; }
+.new-entry-modal .details-modal-body { max-height: 70vh; }
 .details-modal table { width: 100%; border-collapse: collapse; }
 .details-modal th, .details-modal td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border-light); }
 .memo-thumb-wrap {
@@ -856,6 +890,19 @@ input:focus, select:focus, textarea:focus {
         padding-bottom: 8px;
     }
     .form-group { margin-bottom: 12px; }
+    .common-items-header {
+        flex-wrap: nowrap;
+        gap: 8px;
+        margin-bottom: 6px;
+    }
+    .common-items-label { font-size: 15px; white-space: nowrap; }
+    .entry-date-inline {
+        min-width: 9.5em;
+        max-width: 11em;
+        padding: 6px 8px;
+        padding-right: 24px;
+        flex-shrink: 0;
+    }
     label { margin-bottom: 4px; font-size: 15px; }
     input, select, textarea {
         padding: 10px;

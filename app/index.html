@@ -56,81 +56,28 @@
                         <div class="stat-label" id="worker-stat-balance-label">হাতে টাকা</div>
                     </div>
                 </div>
-                <div class="card worker-recent-card">
-                    <div class="card-title">সাম্প্রতিক এন্ট্রি</div>
-                    <div class="worker-recent-table-wrap">
-                        <table class="table table-entries">
+                <div class="new-entry-section card">
+                    <h2 class="new-entry-heading">নতুন এন্ট্রি</h2>
+                    <div class="new-entry-form">
+                        <input type="hidden" id="entry-date" value="">
+                        <table class="table" style="margin-bottom:12px;">
                             <thead>
                                 <tr>
-                                    <th>তারিখ</th>
-                                    <th>মোট খরচ</th>
-                                </tr>
-                            </thead>
-                            <tbody id="worker-recent-tbody">
-                                <tr><td colspan="2" style="text-align:center;color:#6b7280;padding:10px;">লোড হচ্ছে...</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Worker tabs: নতুন এন্ট্রি | সব এন্ট্রি | লগ | বিল ইমপোর্ট -->
-            <div class="worker-tabs">
-                <button type="button" class="worker-tab-btn active" data-worker-tab="new" onclick="switchWorkerTab('new')">নতুন এন্ট্রি</button>
-                <button type="button" class="worker-tab-btn" data-worker-tab="list" onclick="switchWorkerTab('list')">সব এন্ট্রি</button>
-                <button type="button" class="worker-tab-btn" data-worker-tab="log" onclick="switchWorkerTab('log')">লগ</button>
-                <button type="button" class="worker-tab-btn" data-worker-tab="import" onclick="switchWorkerTab('import')">বিল ইমপোর্ট</button>
-            </div>
-
-            <div id="worker-panel-new" class="worker-tab-panel active">
-            <div class="card">
-                <div class="new-entry-header">
-                    <span class="new-entry-title">নতুন</span>
-                    <input type="date" id="entry-date" class="entry-date-inline" value="" title="তারিখ">
-                </div>
-
-                <div class="form-group">
-                    <label>দ্রুত নির্বাচন করুন (Common Items)</label>
-                    <div class="quick-items">
-                        <div class="quick-item" onclick="addQuickItem('🍚 চাল')">🍚 চাল</div>
-                        <div class="quick-item" onclick="addQuickItem('🫘 ডাল')">🫘 ডাল</div>
-                        <div class="quick-item" onclick="addQuickItem('🛢️ তেল')">🛢️ তেল</div>
-                        <div class="quick-item" onclick="addQuickItem('🧅 পেঁয়াজ')">🧅 পেঁয়াজ</div>
-                        <div class="quick-item" onclick="addQuickItem('🧄 রসুন')">🧄 রসুন</div>
-                        <div class="quick-item" onclick="addQuickItem('🥔 আলু')">🥔 আলু</div>
-                        <div class="quick-item" onclick="addQuickItem('🌶️ মরিচ')">🌶️ মরিচ</div>
-                        <div class="quick-item" onclick="addQuickItem('🐟 মাছ')">🐟 মাছ</div>
-                        <div class="quick-item" onclick="addQuickItem('🍗 মুরগি')">🍗 মুরগি</div>
-                        <div class="quick-item" onclick="addQuickItem('🥚 ডিম')">🥚 ডিম</div>
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label>আইটেম তালিকা (Excel Style)</label>
-                    <div class="excel-table-container">
-                        <table class="excel-table">
-                            <thead>
-                                <tr>
-                                    <th style="width: 20%;">আইটেমের নাম</th>
-                                    <th style="width: 10%;">পরিমাণ</th>
-                                    <th style="width: 10%;">একক</th>
-                                    <th style="width: 12%;">প্রতি একক দাম</th>
-                                    <th style="width: 12%;">মোট দাম</th>
-                                    <th style="width: 12%;">ক্যাটাগরি</th>
-                                    <th style="width: 12%;">মেমো ছবি</th>
-                                    <th style="width: 6%;">মুছুন</th>
+                                    <th>আইটেম</th>
+                                    <th>পরিমাণ</th>
+                                    <th>একক</th>
+                                    <th>দাম</th>
+                                    <th>মোট</th>
+                                    <th>মেমো</th>
+                                    <th></th>
                                 </tr>
                             </thead>
                             <tbody id="items-tbody">
                                 <tr>
+                                    <td><input type="text" class="item-name" list="new-entry-item-list" placeholder="নাম..." oninput="calculateRow(this)" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;"></td>
+                                    <td><input type="number" class="item-quantity" value="0" step="0.1" min="0" oninput="calculateRow(this)" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;"></td>
                                     <td>
-                                        <input type="text" class="item-name" placeholder="আইটেম লিখুন..." oninput="calculateRow(this)">
-                                    </td>
-                                    <td>
-                                        <input type="number" class="item-quantity" value="0" step="0.1" min="0" oninput="calculateRow(this)">
-                                    </td>
-                                    <td>
-                                        <select class="item-unit" onchange="calculateRow(this)">
+                                        <select class="item-unit" onchange="calculateRow(this)" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;">
                                             <option>কেজি</option>
                                             <option>পিস</option>
                                             <option>লিটার</option>
@@ -138,58 +85,35 @@
                                             <option>হালি</option>
                                         </select>
                                     </td>
-                                    <td>
-                                        <input type="number" class="item-price" value="0" step="0.01" min="0" oninput="calculateRow(this)">
-                                    </td>
-                                    <td class="calc-cell item-total">০ টাকা</td>
-                                    <td>
-                                        <select class="item-category">
-                                            <option>মুদি</option>
-                                            <option>সবজি</option>
-                                            <option>মাছ-মাংস</option>
-                                            <option>ফলমূল</option>
-                                            <option>অন্যান্য</option>
-                                        </select>
-                                    </td>
+                                    <td><input type="number" class="item-price" value="0" step="0.01" min="0" oninput="calculateRow(this)" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;"></td>
+                                    <td class="calc-cell item-total">০</td>
                                     <td class="memo-cell">
                                         <input type="file" class="item-memo-file" accept="image/*" hidden onchange="previewMemoImage(this)">
-                                        <button type="button" class="memo-upload-btn" onclick="this.previousElementSibling.click()" title="এই আইটেমের মেমো ছবি">📷</button>
+                                        <button type="button" class="memo-upload-btn" onclick="this.previousElementSibling.click()" title="মেমো ছবি">📷</button>
                                         <span class="memo-has-pic" style="display:none;">✓</span>
-                                        <img class="memo-preview" alt="" style="display:none; max-width:32px; max-height:32px; border-radius:4px; vertical-align:middle;">
+                                        <img class="memo-preview" alt="" style="display:none;max-width:28px;max-height:28px;border-radius:4px;vertical-align:middle;">
                                     </td>
-                                    <td style="text-align: center;">
-                                        <button class="delete-btn" onclick="deleteRow(this)">✕</button>
-                                    </td>
+                                    <td><button type="button" class="delete-btn" onclick="deleteRow(this)">✕</button><input type="hidden" class="item-category" value="অন্যান্য"></td>
                                 </tr>
                             </tbody>
                         </table>
-                    </div>
-                    <button class="add-row-btn" onclick="addNewRow()">+ নতুন সারি যোগ করুন</button>
-                </div>
-
-                <div class="form-group">
-                    <label>মন্তব্য (Optional)</label>
-                    <textarea id="entry-comment" rows="2" placeholder="যেমন: আজ বাজার ভালো ছিল, দাম একটু বেশি ছিল"></textarea>
-                </div>
-
-                <div class="summary-box">
-                    <div class="summary-row">
-                        <span>মোট আইটেম:</span>
-                        <span id="total-items" style="font-weight: 600;">০টি</span>
-                    </div>
-                    <div class="summary-row">
-                        <span>সর্বমোট খরচ:</span>
-                        <span id="total-cost" class="summary-total">০ টাকা</span>
+                        <datalist id="new-entry-item-list"></datalist>
+                        <p style="margin-bottom:8px;"><button type="button" class="btn btn-secondary" onclick="addNewRow()" style="font-size:13px;">+ সারি যোগ করুন</button></p>
+                        <p style="margin-bottom:12px;"><strong>মন্তব্য (ঐচ্ছিক):</strong><br><textarea id="entry-comment" rows="2" placeholder="যেমন: আজ বাজার ভালো ছিল" style="width:100%;margin-top:4px;padding:8px;border:1px solid var(--border);border-radius:6px;"></textarea></p>
+                        <p style="margin-bottom:12px;"><strong>মোট খরচ:</strong> <span id="total-cost" class="summary-total" style="font-weight:600;">০ টাকা</span> &nbsp; <strong>মোট আইটেম:</strong> <span id="total-items" style="font-weight:600;">০টি</span></p>
+                        <button class="btn btn-success" id="save-entry-btn" style="width:100%;margin-top:12px;padding:14px;font-size:17px;" onclick="saveEntry()">✓ এন্ট্রি সেভ করুন</button>
                     </div>
                 </div>
-
-                <button class="btn btn-success" id="save-entry-btn" style="width: 100%; margin-top: 20px; padding: 15px; font-size: 18px;" onclick="saveEntry()">
-                    ✓ এন্ট্রি সেভ করুন
-                </button>
-            </div>
             </div>
 
-            <div id="worker-panel-list" class="worker-tab-panel">
+            <!-- Worker tabs: সব এন্ট্রি | লগ | বিল ইমপোর্ট -->
+            <div class="worker-tabs">
+                <button type="button" class="worker-tab-btn active" data-worker-tab="list" onclick="switchWorkerTab('list')">সব এন্ট্রি</button>
+                <button type="button" class="worker-tab-btn" data-worker-tab="log" onclick="switchWorkerTab('log')">লগ</button>
+                <button type="button" class="worker-tab-btn" data-worker-tab="import" onclick="switchWorkerTab('import')">বিল ইমপোর্ট</button>
+            </div>
+
+            <div id="worker-panel-list" class="worker-tab-panel active">
             <div class="card">
                 <div class="card-title">সব বাজার এন্ট্রি</div>
                 <div class="worker-recent-table-wrap">
