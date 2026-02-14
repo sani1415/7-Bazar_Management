@@ -676,13 +676,13 @@ function switchView(view) {
         if (tw) tw.classList.add('active');
         loadWorkerDashboard();
         loadWorkerEntries();
-        switchWorkerTab('list');
+        switchWorkerTab('last');
         populateNewEntryItemList();
     } else {
         document.getElementById('admin-view').classList.add('active');
         var ta = document.getElementById('toggle-admin');
         if (ta) ta.classList.add('active');
-        switchAdminTab('entries');
+        switchAdminTab('last');
         loadAdminData();
         updateBalanceUI();
         loadAdminItemDropdown();
@@ -749,8 +749,8 @@ async function loadWorkerEntries() {
                     '<td>' + formatDate(entry.entry_date) + '</td>' +
                     '<td>' + (entry.item_count || 0) + 'টি আইটেম</td>' +
                     '<td style="font-weight:600;">৳ ' + Number(entry.total_cost).toLocaleString('bn-BD') + '</td>' +
-                    '<td><button type="button" class="btn btn-primary entry-btn" onclick="viewDetails(' + entry.id + ', false)">বিস্তারিত</button></td>' +
-                    '<td><button type="button" class="btn btn-danger entry-delete-btn" onclick="deleteEntryConfirm(' + entry.id + ')" title="এন্ট্রি ডিলিট করুন (লগে সেভ হবে)">ডিলিট</button></td>' +
+                    '<td class="action-cell"><button type="button" class="btn btn-primary entry-btn icon-btn" onclick="viewDetails(' + entry.id + ', false)" title="বিস্তারিত">👁</button></td>' +
+                    '<td class="action-cell"><button type="button" class="btn btn-danger entry-delete-btn icon-btn" onclick="deleteEntryConfirm(' + entry.id + ')" title="ডিলিট (লগে সেভ হবে)">🗑</button></td>' +
                     '</tr>';
             }).join('');
         } else {
@@ -783,8 +783,9 @@ function switchWorkerTab(tabName) {
     });
     document.querySelectorAll('.worker-tab-panel').forEach(function (p) {
         var id = p.id;
-        p.classList.toggle('active', (tabName === 'list' && id === 'worker-panel-list') || (tabName === 'log' && id === 'worker-panel-log') || (tabName === 'import' && id === 'worker-panel-import'));
+        p.classList.toggle('active', (tabName === 'last' && id === 'worker-panel-last') || (tabName === 'list' && id === 'worker-panel-list') || (tabName === 'log' && id === 'worker-panel-log') || (tabName === 'import' && id === 'worker-panel-import'));
     });
+    if (tabName === 'last') loadLastEntryTab('worker');
     if (tabName === 'list') loadWorkerEntries();
     if (tabName === 'log') renderWorkerLog();
 }
@@ -1622,7 +1623,7 @@ async function loadAdminData() {
                     '<td>' + formatDate(entry.entry_date) + ' ' + memoBadge + '</td>' +
                     '<td>' + (entry.item_count || 0) + 'টি আইটেম</td>' +
                     '<td style="font-weight: 600;">৳ ' + Number(entry.total_cost).toLocaleString('bn-BD') + '</td>' +
-                    '<td class="entry-actions-cell"><span class="entry-actions"><button type="button" class="btn btn-primary entry-btn" onclick="viewDetails(' + entry.id + ', true)">বিস্তারিত</button></span></td>' +
+                    '<td class="entry-actions-cell"><span class="entry-actions"><button type="button" class="btn btn-primary entry-btn icon-btn" onclick="viewDetails(' + entry.id + ', true)" title="বিস্তারিত">👁</button></span></td>' +
                     '</tr>';
             }).join('');
         } else {
@@ -1722,26 +1723,8 @@ async function togglePayment(entryId, currentStatus) {
 async function viewDetails(entryId, fromAdmin) {
     try {
         const { entry, items } = await storage.getEntryById(entryId);
-        let html = '';
-        if (entry.bill_image_url) {
-            html += '<p style="margin-bottom:12px;"><strong>বিলের ছবি:</strong> <span role="button" class="memo-thumb-wrap" data-memo-src="' + escapeHtmlAttr(entry.bill_image_url) + '" onclick="viewMemoImage(this.getAttribute(\'data-memo-src\'))" title="বিলের ছবি বড় দেখুন"><img class="item-memo-thumb" src="' + escapeHtmlAttr(entry.bill_image_url) + '" alt="বিল" style="max-width:160px;max-height:120px;"></span></p>';
-        }
-        html += '<p style="margin-bottom:12px;"><strong>তারিখ:</strong> ' + formatDate(entry.entry_date) + '</p>';
-        html += '<p style="margin-bottom:12px;"><strong>মোট খরচ:</strong> ৳ ' + Number(entry.total_cost).toLocaleString('bn-BD') + '</p>';
-        if (entry.comment) html += '<p style="margin-bottom:12px;"><strong>মন্তব্য:</strong> ' + (entry.comment || '') + '</p>';
-        html += '<table class="table"><thead><tr><th>আইটেম</th><th>পরিমাণ</th><th>দাম</th><th>মোট</th><th>মেমো</th></tr></thead><tbody>';
-        (items || []).forEach(function(item) {
-            const memoUrl = item.memo_image_url;
-            const memoCell = memoUrl
-                ? '<span role="button" class="memo-thumb-wrap" data-memo-src="' + escapeHtmlAttr(memoUrl) + '" onclick="viewMemoImage(this.getAttribute(\'data-memo-src\'))" title="মেমো ছবি দেখুন"><img class="item-memo-thumb" src="' + escapeHtmlAttr(memoUrl) + '" alt="মেমো"></span>'
-                : '<span style="color:#9ca3af;">—</span>';
-            var qty = Number(item.quantity) || 0;
-            var price = Number(item.price_per_unit) || 0;
-            var total = Number(item.total_price) || (effectiveQtyForTotal(qty) * price);
-            html += '<tr><td>' + (item.item_name || '') + '</td><td>' + item.quantity + ' ' + (item.unit || '') + '</td><td>৳' + price + '</td><td>৳' + (Number.isFinite(total) ? total : 0).toLocaleString('bn-BD') + '</td><td>' + memoCell + '</td></tr>';
-        });
-        html += '</tbody></table>';
-        if (!fromAdmin) html += '<p style="margin-top:12px;"><button type="button" class="btn btn-primary" onclick="closeDetailsModal(); openEditEntry(' + entryId + ')">এডিট করুন</button></p>';
+        var html = buildEntryDetailHtml(entry, items, { showOpenModal: false });
+        if (!fromAdmin) html += '<p style="margin-top:12px;"><button type="button" class="btn btn-primary icon-btn" onclick="closeDetailsModal(); openEditEntry(' + entryId + ')" title="এডিট করুন">✏️</button></p>';
         document.getElementById('details-modal-body').innerHTML = html;
         document.getElementById('details-modal-overlay').classList.add('show');
     } catch (error) {
@@ -1752,6 +1735,128 @@ async function viewDetails(entryId, fromAdmin) {
 
 function closeDetailsModal() {
     document.getElementById('details-modal-overlay').classList.remove('show');
+}
+
+function buildEntryDetailHtml(entry, items, opts) {
+    opts = opts || {};
+    var html = '';
+    if (entry.bill_image_url) {
+        html += '<p style="margin-bottom:12px;"><strong>বিলের ছবি:</strong> <span role="button" class="memo-thumb-wrap" data-memo-src="' + escapeHtmlAttr(entry.bill_image_url) + '" onclick="viewMemoImage(this.getAttribute(\'data-memo-src\'))" title="বিলের ছবি বড় দেখুন"><img class="item-memo-thumb" src="' + escapeHtmlAttr(entry.bill_image_url) + '" alt="বিল" style="max-width:160px;max-height:120px;"></span></p>';
+    }
+    html += '<p style="margin-bottom:12px;"><strong>তারিখ:</strong> ' + formatDate(entry.entry_date) + '</p>';
+    html += '<p style="margin-bottom:12px;"><strong>মোট খরচ:</strong> ৳ ' + Number(entry.total_cost).toLocaleString('bn-BD') + '</p>';
+    if (entry.comment) html += '<p style="margin-bottom:12px;"><strong>মন্তব্য:</strong> ' + escapeHtml(entry.comment) + '</p>';
+    html += '<table class="table"><thead><tr><th>আইটেম</th><th>পরিমাণ</th><th>দাম</th><th>মোট</th><th>মেমো</th></tr></thead><tbody>';
+    (items || []).forEach(function (item) {
+        var memoUrl = item.memo_image_url;
+        var memoCell = memoUrl
+            ? '<span role="button" class="memo-thumb-wrap" data-memo-src="' + escapeHtmlAttr(memoUrl) + '" onclick="viewMemoImage(this.getAttribute(\'data-memo-src\'))" title="মেমো ছবি দেখুন"><img class="item-memo-thumb" src="' + escapeHtmlAttr(memoUrl) + '" alt="মেমো"></span>'
+            : '<span style="color:#9ca3af;">—</span>';
+        var qty = Number(item.quantity) || 0;
+        var price = Number(item.price_per_unit) || 0;
+        var total = Number(item.total_price) || (effectiveQtyForTotal(qty) * price);
+        html += '<tr><td>' + escapeHtml(item.item_name || '') + '</td><td>' + item.quantity + ' ' + (item.unit || '') + '</td><td>৳' + price + '</td><td>৳' + (Number.isFinite(total) ? total : 0).toLocaleString('bn-BD') + '</td><td>' + memoCell + '</td></tr>';
+    });
+    html += '</tbody></table>';
+    if (opts.showOpenModal && entry.id) {
+        var fromAdmin = opts.fromAdmin ? 'true' : 'false';
+        html += '<p style="margin-top:12px;"><button type="button" class="btn btn-secondary btn-sm" onclick="viewDetails(' + entry.id + ', ' + fromAdmin + ')">পূর্ণ দেখুন</button></p>';
+    }
+    return html;
+}
+
+async function loadLastEntryTab(which, entryIndex) {
+    var containerId = which === 'admin' ? 'admin-last-entry-body' : 'worker-last-entry-body';
+    var body = document.getElementById(containerId);
+    if (!body) return;
+    if (entryIndex === undefined || entryIndex === null) entryIndex = 0;
+    try {
+        var entries = await storage.getEntries(100);
+        if (!entries || entries.length === 0) {
+            body.innerHTML = '<p style="text-align:center;color:#6b7280;padding:12px;">কোনো এন্ট্রি নেই</p>';
+            return;
+        }
+        if (entryIndex < 0) entryIndex = 0;
+        if (entryIndex >= entries.length) entryIndex = entries.length - 1;
+        var totalCount = entries.length;
+        var selected = entries[entryIndex];
+        var result = await storage.getEntryById(selected.id);
+        var entry = result.entry;
+        var items = result.items || [];
+        var lastId = entry.id;
+        var allEntries = await storage.getEntriesInDateRange('2000-01-01', '2099-12-31');
+        allEntries = (allEntries || []).map(function (e) {
+            var list = e.grocery_items || e._items || [];
+            if (!list.length && storage._getItems) {
+                list = storage._getItems().filter(function (it) { return String(it.entry_id) === String(e.id); });
+            }
+            e._items = Array.isArray(list) ? list : [];
+            return e;
+        });
+        var flat = [];
+        allEntries.forEach(function (e) {
+            (e._items || []).forEach(function (it) {
+                var name = (it.item_name || '').trim();
+                if (name) flat.push({ item_name: name, entry_id: e.id, entry_date: e.entry_date || '', price: Number(it.price_per_unit) || 0 });
+            });
+        });
+        var byName = {};
+        flat.forEach(function (r) {
+            if (!byName[r.item_name]) byName[r.item_name] = [];
+            byName[r.item_name].push(r);
+        });
+        var prevMap = {};
+        Object.keys(byName).forEach(function (name) {
+            var arr = byName[name].sort(function (a, b) {
+                var c = (b.entry_date || '').localeCompare(a.entry_date || '');
+                return c !== 0 ? c : (Number(b.entry_id) - Number(a.entry_id));
+            });
+            var prevRow = arr.filter(function (r) { return String(r.entry_id) !== String(lastId); })[0];
+            prevMap[name] = prevRow ? prevRow.price : null;
+        });
+        var html = '';
+        html += '<div class="last-entry-nav" style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px;padding:8px 0;border-bottom:1px solid var(--border-color, #e5e7eb);">';
+        html += '<button type="button" class="btn btn-secondary btn-sm" onclick="loadLastEntryTab(\'' + which + '\',' + (entryIndex + 1) + ')"' + (entryIndex >= totalCount - 1 ? ' disabled' : '') + '>← আগের এন্ট্রি</button>';
+        html += '<span style="flex:1;text-align:center;color:#6b7280;font-size:0.95em;">' + (entryIndex + 1) + ' / ' + totalCount + '</span>';
+        html += '<button type="button" class="btn btn-secondary btn-sm" onclick="loadLastEntryTab(\'' + which + '\',' + (entryIndex - 1) + ')"' + (entryIndex <= 0 ? ' disabled' : '') + '>পরের এন্ট্রি →</button>';
+        html += '</div>';
+        if (entry.bill_image_url) html += '<p style="margin-bottom:12px;"><strong>বিলের ছবি:</strong> <span role="button" class="memo-thumb-wrap" data-memo-src="' + escapeHtmlAttr(entry.bill_image_url) + '" onclick="viewMemoImage(this.getAttribute(\'data-memo-src\'))"><img class="item-memo-thumb" src="' + escapeHtmlAttr(entry.bill_image_url) + '" alt="বিল" style="max-width:160px;max-height:120px;"></span></p>';
+        html += '<p style="margin-bottom:12px;"><strong>তারিখ:</strong> ' + formatDate(entry.entry_date) + '</p>';
+        html += '<p style="margin-bottom:12px;"><strong>মোট খরচ:</strong> ৳ ' + Number(entry.total_cost).toLocaleString('bn-BD') + '</p>';
+        if (entry.comment) html += '<p style="margin-bottom:12px;"><strong>মন্তব্য:</strong> ' + escapeHtml(entry.comment) + '</p>';
+        html += '<table class="table"><thead><tr><th>আইটেম</th><th>পরিমাণ</th><th>একক</th><th>দাম (এখন)</th><th>দাম (আগের বার)</th><th>পরিবর্তন</th><th>প্রবণতা</th><th>মেমো</th></tr></thead><tbody>';
+        (items || []).forEach(function (item) {
+            var name = (item.item_name || '').trim();
+            var currentPrice = Number(item.price_per_unit) || 0;
+            var qty = Number(item.quantity) || 0;
+            var total = Number(item.total_price) || (effectiveQtyForTotal(qty) * currentPrice);
+            var prevPrice = prevMap[name];
+            var prevStr = prevPrice !== null && prevPrice !== undefined ? ('৳ ' + Number(prevPrice).toLocaleString('bn-BD')) : '—';
+            var currStr = '৳ ' + Number(currentPrice).toLocaleString('bn-BD');
+            var changeStr = '—';
+            var trend = '—';
+            var trendClass = '';
+            if (prevPrice !== null && prevPrice !== undefined) {
+                var change = currentPrice - prevPrice;
+                var pct = prevPrice !== 0 ? (change / prevPrice) * 100 : 0;
+                changeStr = (change >= 0 ? '+' : '') + '৳' + Number(change).toLocaleString('bn-BD') + ' (' + (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%)';
+                trend = change > 0 ? '↑ উঠেছে' : change < 0 ? '↓ নেমেছে' : '—';
+                trendClass = change > 0 ? 'price-up' : change < 0 ? 'price-down' : '';
+            }
+            var memoUrl = item.memo_image_url;
+            var memoCell = memoUrl
+                ? '<span role="button" class="memo-thumb-wrap" data-memo-src="' + escapeHtmlAttr(memoUrl) + '" onclick="viewMemoImage(this.getAttribute(\'data-memo-src\'))"><img class="item-memo-thumb" src="' + escapeHtmlAttr(memoUrl) + '" alt="মেমো" style="max-width:32px;max-height:32px;"></span>'
+                : '<span style="color:#9ca3af;">—</span>';
+            html += '<tr><td>' + escapeHtml(name) + '</td><td>' + item.quantity + '</td><td>' + (item.unit || '') + '</td><td>' + currStr + '</td><td>' + prevStr + '</td><td>' + changeStr + '</td><td class="' + trendClass + '">' + trend + '</td><td>' + memoCell + '</td></tr>';
+        });
+        html += '</tbody></table>';
+        var fromAdmin = (which === 'admin');
+        html += '<p style="margin-top:12px;"><button type="button" class="btn btn-secondary btn-sm" onclick="viewDetails(' + entry.id + ', ' + fromAdmin + ')">পূর্ণ দেখুন</button></p>';
+        body.innerHTML = html;
+    } catch (err) {
+        console.error('Error loading last entry tab:', err);
+        body.innerHTML = '<p style="text-align:center;color:#946a6a;padding:12px;">' + getNetworkErrorMessage(err) + '</p>';
+    }
 }
 
 // ---------- Edit entry modal ----------
@@ -1930,13 +2035,118 @@ function switchAdminTab(tabName) {
     });
     document.querySelectorAll('.admin-tab-panel').forEach(function (p) {
         var id = p.id;
-        p.classList.toggle('active', (tabName === 'entries' && id === 'admin-panel-entries') || (tabName === 'log' && id === 'admin-panel-log'));
+        p.classList.toggle('active', (tabName === 'last' && id === 'admin-panel-last') || (tabName === 'entries' && id === 'admin-panel-entries') || (tabName === 'analysis' && id === 'admin-panel-analysis') || (tabName === 'log' && id === 'admin-panel-log'));
     });
+    if (tabName === 'last') loadLastEntryTab('admin');
     if (tabName === 'entries') {
         loadAdminData();
         if (!_cachedPastItemNames) loadAdminItemDropdown();
     }
+    if (tabName === 'analysis') loadPriceAnalysis();
     if (tabName === 'log') renderAdminLog();
+}
+
+// Price analysis: search by item → show date, price, change %; no search → all items comparison
+async function loadPriceAnalysis() {
+    var tbody = document.getElementById('price-analysis-tbody');
+    var thead = document.getElementById('price-analysis-thead');
+    if (!tbody) return;
+    var searchInput = document.getElementById('price-analysis-search-input');
+    var searchTerm = (searchInput && searchInput.value) ? searchInput.value.trim() : '';
+    try {
+        var entries = await storage.getEntriesInDateRange('2000-01-01', '2099-12-31');
+        if (!entries) entries = [];
+        var attachItems = function (e) {
+            var items = e.grocery_items || e._items || [];
+            if (!items.length && storage._getItems) {
+                items = storage._getItems().filter(function (it) { return String(it.entry_id) === String(e.id); });
+            }
+            e._items = Array.isArray(items) ? items : [];
+            return e;
+        };
+        entries = entries.map(attachItems);
+        var flat = [];
+        entries.forEach(function (e) {
+            var d = e.entry_date || '';
+            (e._items || []).forEach(function (it) {
+                var name = (it.item_name || '').trim();
+                if (name) flat.push({ item_name: name, price: Number(it.price_per_unit) || 0, entry_date: d });
+            });
+        });
+        var byName = {};
+        flat.forEach(function (r) {
+            if (!byName[r.item_name]) byName[r.item_name] = [];
+            byName[r.item_name].push({ price: r.price, entry_date: r.entry_date });
+        });
+
+        if (searchTerm) {
+            var namesMatching = Object.keys(byName).filter(function (name) {
+                return name.indexOf(searchTerm) >= 0;
+            });
+            if (namesMatching.length === 0) {
+                if (thead) thead.innerHTML = '<tr><th>তারিখ</th><th>দাম (৳)</th><th>পরিবর্তন</th></tr>';
+                tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#6b7280;padding:12px;">কোনো আইটেম মিলেছে না। অন্য নাম লিখে খুঁজুন।</td></tr>';
+            } else {
+                var showName = namesMatching.sort(function (a, b) { return a.localeCompare(b, 'bn'); })[0];
+                var history = byName[showName].sort(function (a, b) { return (b.entry_date || '').localeCompare(a.entry_date || ''); });
+                if (thead) thead.innerHTML = '<tr><th>তারিখ</th><th>দাম (৳)</th><th>পরিবর্তন</th></tr>';
+                var historyRows = [];
+                for (var i = 0; i < history.length; i++) {
+                    var prevPrice = i < history.length - 1 ? history[i + 1].price : null;
+                    var currPrice = history[i].price;
+                    var changeStr = '—';
+                    var trendClass = '';
+                    if (prevPrice !== null && prevPrice !== undefined) {
+                        var pct = prevPrice !== 0 ? ((currPrice - prevPrice) / prevPrice) * 100 : 0;
+                        changeStr = pct > 0 ? '↑ ' + pct.toFixed(1) + '% বেড়েছে' : pct < 0 ? '↓ ' + Math.abs(pct).toFixed(1) + '% কমেছে' : '—';
+                        trendClass = pct > 0 ? 'price-up' : pct < 0 ? 'price-down' : '';
+                    } else {
+                        changeStr = 'প্রথম কেনা';
+                    }
+                    historyRows.push('<tr><td>' + formatDate(history[i].entry_date) + '</td><td>৳ ' + Number(currPrice).toLocaleString('bn-BD') + '</td><td class="' + trendClass + '">' + changeStr + '</td></tr>');
+                }
+                tbody.innerHTML = historyRows.join('');
+            }
+        } else {
+            if (thead) thead.innerHTML = '<tr><th>আইটেম</th><th>দাম (আগের বার)</th><th>দাম (এখন)</th><th>পরিবর্তন</th><th>প্রবণতা</th></tr>';
+            var rows = [];
+            Object.keys(byName).forEach(function (name) {
+                var arr = byName[name].sort(function (a, b) { return (b.entry_date || '').localeCompare(a.entry_date || ''); });
+                var current = arr[0].price;
+                var previous = arr.length > 1 ? arr[1].price : null;
+                var changeAmount = null;
+                var changePercent = null;
+                var trend = '—';
+                if (previous !== null && previous !== undefined) {
+                    changeAmount = current - previous;
+                    changePercent = previous !== 0 ? (changeAmount / previous) * 100 : 0;
+                    trend = changeAmount > 0 ? '↑ উঠেছে' : changeAmount < 0 ? '↓ নেমেছে' : '—';
+                }
+                rows.push({ item_name: name, previousPrice: previous, currentPrice: current, changeAmount: changeAmount, changePercent: changePercent, trend: trend });
+            });
+            rows.sort(function (a, b) { return a.item_name.localeCompare(b.item_name, 'bn'); });
+            if (rows.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#6b7280;padding:12px;">কোনো ডেটা নেই। এন্ট্রি যোগ করুন বা আইটেমের নাম লিখে খুঁজুন।</td></tr>';
+            } else {
+                tbody.innerHTML = rows.map(function (r) {
+                    var prevStr = r.previousPrice !== null && r.previousPrice !== undefined ? ('৳ ' + Number(r.previousPrice).toLocaleString('bn-BD')) : '—';
+                    var currStr = '৳ ' + Number(r.currentPrice).toLocaleString('bn-BD');
+                    var changeStr = '—';
+                    if (r.changeAmount !== null && r.changeAmount !== undefined) {
+                        var sign = r.changeAmount >= 0 ? '+' : '';
+                        changeStr = sign + '৳' + Number(r.changeAmount).toLocaleString('bn-BD');
+                        if (r.changePercent !== null) changeStr += ' (' + (r.changePercent >= 0 ? '+' : '') + r.changePercent.toFixed(1) + '%)';
+                    }
+                    var trendClass = r.trend.indexOf('উঠেছে') >= 0 ? 'price-up' : r.trend.indexOf('নেমেছে') >= 0 ? 'price-down' : '';
+                    return '<tr><td>' + escapeHtml(r.item_name) + '</td><td>' + prevStr + '</td><td>' + currStr + '</td><td>' + changeStr + '</td><td class="' + trendClass + '">' + r.trend + '</td></tr>';
+                }).join('');
+            }
+        }
+    } catch (err) {
+        console.error('Error loading price analysis:', err);
+        if (thead) thead.innerHTML = '<tr><th>আইটেম</th><th>দাম (আগের বার)</th><th>দাম (এখন)</th><th>পরিবর্তন</th><th>প্রবণতা</th></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#946a6a;padding:12px;">' + getNetworkErrorMessage(err) + '</td></tr>';
+    }
 }
 
 async function renderAdminLog() {

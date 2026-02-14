@@ -106,14 +106,24 @@
                 </div>
             </div>
 
-            <!-- Worker tabs: সব এন্ট্রি | লগ | বিল ইমপোর্ট -->
+            <!-- Worker tabs: সর্বশেষ এন্ট্রি (default) | সব এন্ট্রি | লগ | বিল ইমপোর্ট -->
             <div class="worker-tabs">
-                <button type="button" class="worker-tab-btn active" data-worker-tab="list" onclick="switchWorkerTab('list')">সব এন্ট্রি</button>
+                <button type="button" class="worker-tab-btn active" data-worker-tab="last" onclick="switchWorkerTab('last')">সর্বশেষ এন্ট্রি</button>
+                <button type="button" class="worker-tab-btn" data-worker-tab="list" onclick="switchWorkerTab('list')">সব এন্ট্রি</button>
                 <button type="button" class="worker-tab-btn" data-worker-tab="log" onclick="switchWorkerTab('log')">লগ</button>
                 <button type="button" class="worker-tab-btn" data-worker-tab="import" onclick="switchWorkerTab('import')">বিল ইমপোর্ট</button>
             </div>
 
-            <div id="worker-panel-list" class="worker-tab-panel active">
+            <div id="worker-panel-last" class="worker-tab-panel active">
+                <div class="card">
+                    <div class="card-title">সর্বশেষ এন্ট্রি (দামের তুলনা)</div>
+                    <div id="worker-last-entry-body" class="last-entry-body">
+                        <p style="text-align:center;color:#6b7280;padding:12px;">লোড হচ্ছে...</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="worker-panel-list" class="worker-tab-panel">
             <div class="card">
                 <div class="card-title">সব বাজার এন্ট্রি</div>
                 <div class="worker-recent-table-wrap">
@@ -123,8 +133,8 @@
                                 <th>তারিখ</th>
                                 <th>আইটেম সংখ্যা</th>
                                 <th>মোট খরচ</th>
-                                <th>অ্যাকশন</th>
-                                <th>ডিলিট</th>
+                                <th class="icon-header" title="বিস্তারিত">👁</th>
+                                <th class="icon-header" title="ডিলিট">🗑</th>
                             </tr>
                         </thead>
                         <tbody id="worker-entries-tbody">
@@ -206,13 +216,24 @@
                 </div>
             </div>
 
-            <!-- Admin tabs under dashboard: সব এন্ট্রি | লগ -->
+            <!-- Admin tabs: সর্বশেষ এন্ট্রি (default) | সব এন্ট্রি | দাম বিশ্লেষণ | লগ -->
             <div class="admin-tabs worker-tabs">
-                <button type="button" class="admin-tab-btn worker-tab-btn active" data-admin-tab="entries" onclick="switchAdminTab('entries')">সব এন্ট্রি</button>
+                <button type="button" class="admin-tab-btn worker-tab-btn active" data-admin-tab="last" onclick="switchAdminTab('last')">সর্বশেষ এন্ট্রি</button>
+                <button type="button" class="admin-tab-btn worker-tab-btn" data-admin-tab="entries" onclick="switchAdminTab('entries')">সব এন্ট্রি</button>
+                <button type="button" class="admin-tab-btn worker-tab-btn" data-admin-tab="analysis" onclick="switchAdminTab('analysis')">দাম বিশ্লেষণ</button>
                 <button type="button" class="admin-tab-btn worker-tab-btn" data-admin-tab="log" onclick="switchAdminTab('log')">লগ</button>
             </div>
 
-            <div id="admin-panel-entries" class="admin-tab-panel worker-tab-panel active">
+            <div id="admin-panel-last" class="admin-tab-panel worker-tab-panel active">
+                <div class="card">
+                    <div class="card-title">সর্বশেষ এন্ট্রি (দামের তুলনা)</div>
+                    <div id="admin-last-entry-body" class="last-entry-body">
+                        <p style="text-align:center;color:#6b7280;padding:12px;">লোড হচ্ছে...</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="admin-panel-entries" class="admin-tab-panel worker-tab-panel">
                 <!-- Filters -->
                 <div class="card">
                     <div class="card-title">ফিল্টার ও সার্চ</div>
@@ -250,7 +271,7 @@
                                 <th>তারিখ</th>
                                 <th>আইটেম সংখ্যা</th>
                                 <th>মোট খরচ</th>
-                                <th>অ্যাকশন</th>
+                                <th class="icon-header" title="বিস্তারিত">👁</th>
                             </tr>
                         </thead>
                         <tbody id="entries-tbody">
@@ -274,6 +295,33 @@
                             <tr><td colspan="4" style="text-align: center; padding: 20px; color: #6b7280;">কোনো ডেটা নেই</td></tr>
                         </tbody>
                     </table>
+                </div>
+            </div>
+
+            <div id="admin-panel-analysis" class="admin-tab-panel worker-tab-panel">
+                <div class="card">
+                    <div class="card-title">আইটেমের দাম: আগের বার বনাম এখন</div>
+                    <p style="margin-bottom:10px; font-size: 13px; color: var(--text-muted, #6b7280);">আইটেম লিখে খুঁজুন—কবে কত দামে কিনেছেন ও আগের দামের সাথে কত পরিবর্তন। খালি রেখে খুঁজুন = সব আইটেমের তুলনা।</p>
+                    <div class="price-analysis-search" style="margin-bottom:14px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                        <input type="text" id="price-analysis-search-input" class="filter-input" placeholder="আইটেমের নাম লিখুন (যেমন: পেঁয়াজ, চাল)" style="flex:1; min-width:180px; padding:8px 12px;" onkeydown="if(event.key==='Enter') loadPriceAnalysis();">
+                        <button type="button" class="btn btn-primary" onclick="loadPriceAnalysis()">খুঁজুন</button>
+                    </div>
+                    <div class="worker-recent-table-wrap">
+                        <table class="table">
+                            <thead id="price-analysis-thead">
+                                <tr>
+                                    <th>আইটেম</th>
+                                    <th>দাম (আগের বার)</th>
+                                    <th>দাম (এখন)</th>
+                                    <th>পরিবর্তন</th>
+                                    <th>প্রবণতা</th>
+                                </tr>
+                            </thead>
+                            <tbody id="price-analysis-tbody">
+                                <tr><td colspan="5" style="text-align:center;color:#6b7280;padding:12px;">লোড হচ্ছে...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
