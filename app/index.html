@@ -9,12 +9,22 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
-    <!-- Supabase Client Library (must load before app.js) -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <!-- Hijri to Gregorian (for CSV import with Hijri dates) -->
     <script src="lib/hijri-converter-browser.js"></script>
 </head>
 <body>
+    <div id="login-overlay" class="login-overlay" role="dialog" aria-label="লগইন">
+        <form id="login-form" class="login-card">
+            <h2>বাজার ম্যানেজমেন্ট</h2>
+            <p>হিসাব দেখতে লগইন করুন।</p>
+            <label for="login-email">ইমেইল</label>
+            <input id="login-email" type="email" autocomplete="username" required>
+            <label for="login-password">পাসওয়ার্ড</label>
+            <input id="login-password" type="password" autocomplete="current-password" required>
+            <button class="btn btn-primary" type="submit">ঢুকুন</button>
+            <p id="login-error" class="login-error"></p>
+        </form>
+    </div>
     <div class="container">
         <div class="header header-with-toggle">
             <div class="header-title-wrap">
@@ -24,6 +34,7 @@
             <div class="view-toggle" role="switch" aria-label="বাজারকারী বা অ্যাডমিন ভিউ">
                 <button type="button" class="view-toggle-btn active" id="toggle-worker" onclick="switchView('worker')">বাজারকারী</button>
                 <button type="button" class="view-toggle-btn" id="toggle-admin" onclick="switchView('admin')">অ্যাডমিন</button>
+                <button type="button" class="view-toggle-btn" id="logout-btn" onclick="logoutApp()">বের হোন</button>
             </div>
         </div>
 

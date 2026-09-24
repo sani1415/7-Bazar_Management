@@ -1,21 +1,54 @@
-/* বাজার ম্যানেজমেন্ট - App logic. Requires Supabase script loaded first. */
+/* বাজার ম্যানেজমেন্ট - App logic. Data goes through the Cloudflare Worker /api. */
 
-// ---------- STORAGE MODE: switch to Supabase when ready ----------
-const USE_LOCAL_STORAGE = false;  // Set to false when you want to use Supabase
+const USE_LOCAL_STORAGE = false;
 
-// Initialize Supabase (used only when USE_LOCAL_STORAGE is false)
-// Use same credentials as in .env (browser does not load .env; keep app.js in sync with your project)
-const SUPABASE_URL = 'https://kajaxkqwxbbgmdlqkcjn.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImthamF4a3F3eGJiZ21kbHFrY2puIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA4MDQ3NDIsImV4cCI6MjA4NjM4MDc0Mn0.ulE9_0Sv-TpETDWmJtJxVOWx6CuKkeCw2KJqw9Af6JU';
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-// User-friendly message when Supabase is unreachable (network/DNS)
 function getNetworkErrorMessage(err) {
     var msg = (err && (err.message || err.details || '')) || '';
     if (/failed to fetch|network|ERR_NAME_NOT_RESOLVED|load failed/i.test(msg)) {
-        return 'সার্ভারে সংযোগ হচ্ছে না। ইন্টারনেট চেক করুন। (Supabase অফলাইনে থাকলে app.js এ USE_LOCAL_STORAGE = true দিন)';
+        return 'সার্ভারে সংযোগ হচ্ছে না। ইন্টারনেট চেক করুন।';
     }
-    return 'লোড করতে সমস্যা হয়েছে';
+    return msg || 'লোড করতে সমস্যা হয়েছে';
+}
+
+async function api(path, options) {
+    const response = await fetch(path, Object.assign({ credentials: 'same-origin' }, options || {}));
+    if (!response.ok) {
+        const body = await response.json().catch(function () { return {}; });
+        const error = new Error(body && body.error ? body.error : 'Request failed (' + response.status + ')');
+        error.status = response.status;
+        throw error;
+    }
+    if (response.status === 204) return null;
+    return response.json();
+}
+
+async function uploadImage(file) {
+    const form = new FormData();
+    form.append('file', file);
+    const data = await api('/api/images', { method: 'POST', body: form });
+    return data.url;
+}
+
+let moneyLogCache = [];
+
+async function refreshMoneyLog() {
+    if (USE_LOCAL_STORAGE) return;
+    let rows = await api('/api/money');
+    if ((!rows || !rows.length)) {
+        const local = _getAddMoneyLog();
+        if (local.length) {
+            for (let i = 0; i < local.length; i++) {
+                await api('/api/money', {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json' },
+                    body: JSON.stringify({ date: local[i].date, amount: local[i].amount })
+                });
+            }
+            localStorage.removeItem(LS_ADD_MONEY_LOG);
+            rows = await api('/api/money');
+        }
+    }
+    moneyLogCache = rows || [];
 }
 
 // ---------- LocalStorage adapter ----------
@@ -52,21 +85,31 @@ function _migrateAddMoneyLogIfNeeded() {
 
 function getTotalAdded() {
     _migrateAddMoneyLogIfNeeded();
-    const log = _getAddMoneyLog();
+    const log = USE_LOCAL_STORAGE ? _getAddMoneyLog() : moneyLogCache;
     return log.reduce((sum, e) => sum + Number(e.amount || 0), 0);
 }
 
 function getAddMoneyLog() {
     _migrateAddMoneyLogIfNeeded();
-    return _getAddMoneyLog().slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const log = USE_LOCAL_STORAGE ? _getAddMoneyLog() : moneyLogCache;
+    return log.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 }
 
-function addMoney(amount) {
+async function addMoney(amount) {
     const n = parseFloat(amount);
     if (isNaN(n) || n <= 0) return false;
-    const log = _getAddMoneyLog();
-    log.push({ date: new Date().toISOString().split('T')[0], amount: n });
-    _saveAddMoneyLog(log);
+    if (USE_LOCAL_STORAGE) {
+        const log = _getAddMoneyLog();
+        log.push({ date: new Date().toISOString().split('T')[0], amount: n });
+        _saveAddMoneyLog(log);
+        return true;
+    }
+    await api('/api/money', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ date: new Date().toISOString().split('T')[0], amount: n })
+    });
+    await refreshMoneyLog();
     return true;
 }
 
@@ -82,15 +125,13 @@ async function getEditLog() {
         } catch (e) { return []; }
     } else {
         // Fetch from Supabase edit_log table
-        const { data, error } = await supabaseClient
-            .from('edit_log')
-            .select('*')
-            .order('edited_at', { ascending: false });
-        if (error) {
-            console.error('Error fetching edit log from Supabase:', error);
+        try {
+            const data = await api('/api/edit-log');
+            return data || [];
+        } catch (error) {
+            console.error('Error fetching edit log:', error);
             return [];
         }
-        return data || [];
     }
 }
 
@@ -109,19 +150,17 @@ async function addToEditLog(entryId, entryDate, previousTotal, newTotal, summary
             localStorage.setItem(LS_EDIT_LOG, JSON.stringify(log));
         } catch (e) { /* ignore */ }
     } else {
-        const { error } = await supabaseClient
-            .from('edit_log')
-            .insert([{
+        await api('/api/edit-log', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
                 entry_id: entryId,
                 entry_date: entryDate,
                 previous_total: previousTotal,
                 new_total: newTotal,
                 summary: summary || null
-            }]);
-        if (error) {
-            console.error('Error adding to edit log in Supabase:', error);
-            throw error;
-        }
+            })
+        });
     }
 }
 
@@ -301,160 +340,90 @@ const localStorageAdapter = {
     }
 };
 
-// ---------- Supabase adapter (same API) ----------
-const MEMO_BUCKET = 'memo-images';
-const supabaseAdapter = {
+const cloudflareAdapter = {
     async saveEntry(entryData, items, billFile) {
-        var billImageUrl = null;
+        var billImageUrl = entryData.bill_image_url || null;
         if (billFile) {
-            try {
-                var ext = (billFile.name || '').split('.').pop() || 'jpg';
-                var path = `bill_images/${Date.now()}.${ext}`;
-                var { error: upErr } = await supabaseClient.storage.from(MEMO_BUCKET).upload(path, billFile, { upsert: true });
-                if (!upErr) {
-                    var { data: urlData } = supabaseClient.storage.from(MEMO_BUCKET).getPublicUrl(path);
-                    billImageUrl = urlData.publicUrl;
-                }
-            } catch (e) { console.warn('Bill file upload failed', e); }
+            try { billImageUrl = await uploadImage(billFile); }
+            catch (e) { console.warn('Bill file upload failed', e); }
         }
-        const { data: entryDataRes, error: entryError } = await supabaseClient
-            .from('grocery_entries')
-            .insert([{
+        const payloadItems = [];
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            let memoUrl = item.memo_image_url || null;
+            if (item.memoFile) {
+                try { memoUrl = await uploadImage(item.memoFile); }
+                catch (e) { console.warn('Memo upload failed', e); }
+            }
+            payloadItems.push({
+                name: item.name,
+                quantity: item.quantity,
+                unit: item.unit,
+                price_per_unit: item.price_per_unit,
+                total_price: item.total_price,
+                category: item.category,
+                memo_image_url: memoUrl
+            });
+        }
+        return api('/api/entries', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
                 entry_date: entryData.entry_date,
                 total_cost: entryData.total_cost,
                 item_count: entryData.item_count,
                 comment: entryData.comment || null,
                 payment_status: entryData.payment_status || 'pending',
-                bill_image_url: billImageUrl || null
-            }])
-            .select();
-        if (entryError) throw entryError;
-        const entryId = entryDataRes[0].id;
-        for (let i = 0; i < items.length; i++) {
-            const item = items[i];
-            if (item.memoFile) {
-                try {
-                    const ext = (item.memoFile.name || '').split('.').pop() || 'jpg';
-                    const path = `${entryId}/${i}_${Date.now()}.${ext}`;
-                    const { error: upErr } = await supabaseClient.storage.from(MEMO_BUCKET).upload(path, item.memoFile, { upsert: true });
-                    if (!upErr) {
-                        const { data: urlData } = supabaseClient.storage.from(MEMO_BUCKET).getPublicUrl(path);
-                        item.memo_image_url = urlData.publicUrl;
-                    }
-                } catch (e) { console.warn('Memo upload failed', e); }
-            }
-            delete item.memoFile;
-        }
-        const itemsToInsert = items.map(item => ({
-            entry_id: entryId,
-            item_name: item.name,
-            quantity: item.quantity,
-            unit: item.unit,
-            price_per_unit: item.price_per_unit,
-            total_price: item.total_price,
-            category: item.category,
-            memo_image_url: item.memo_image_url || null
-        }));
-        const { error: itemsError } = await supabaseClient.from('grocery_items').insert(itemsToInsert);
-        if (itemsError) throw itemsError;
-        return { id: entryId };
+                bill_image_url: billImageUrl,
+                items: payloadItems
+            })
+        });
     },
 
     async getEntries(limit = 20) {
-        const { data, error } = await supabaseClient
-            .from('grocery_entries')
-            .select('*, grocery_items(*)')
-            .order('entry_date', { ascending: false })
-            .limit(limit);
-        if (error) throw error;
-        return data || [];
+        return api('/api/entries?limit=' + encodeURIComponent(limit));
     },
 
     async getEntriesInMonth(firstDayOfMonth) {
-        const { data, error } = await supabaseClient
-            .from('grocery_entries')
-            .select('total_cost, entry_date, payment_status')
-            .gte('entry_date', firstDayOfMonth);
-        if (error) throw error;
-        return data || [];
+        return api('/api/entries?from=' + encodeURIComponent(firstDayOfMonth) + '&to=2099-12-31&fields=summary');
     },
 
     async getEntriesInDateRange(startDate, endDate) {
-        const { data, error } = await supabaseClient
-            .from('grocery_entries')
-            .select('*, grocery_items(*)')
-            .gte('entry_date', startDate)
-            .lte('entry_date', endDate)
-            .order('entry_date', { ascending: false });
-        if (error) throw error;
-        return data || [];
+        return api('/api/entries?from=' + encodeURIComponent(startDate) + '&to=' + encodeURIComponent(endDate));
     },
 
     async getItemsInMonth(firstDayOfMonth) {
-        const { data, error } = await supabaseClient
-            .from('grocery_items')
-            .select('item_name, quantity, unit, total_price, price_per_unit')
-            .gte('created_at', firstDayOfMonth);
-        if (error) throw error;
-        return data || [];
+        const entries = await this.getEntriesInDateRange(firstDayOfMonth, '2099-12-31');
+        return (entries || []).flatMap(function (entry) { return entry.grocery_items || []; });
     },
 
     async getItemsInDateRange(startDate, endDate) {
         const entries = await this.getEntriesInDateRange(startDate, endDate);
-        const ids = (entries || []).map(e => e.id);
-        if (ids.length === 0) return [];
-        const { data, error } = await supabaseClient.from('grocery_items').select('*').in('entry_id', ids);
-        if (error) throw error;
-        return data || [];
+        return (entries || []).flatMap(function (entry) { return entry.grocery_items || []; });
     },
 
     async updatePaymentStatus(entryId, newStatus) {
-        const { error } = await supabaseClient
-            .from('grocery_entries')
-            .update({ payment_status: newStatus })
-            .eq('id', entryId);
-        if (error) throw error;
+        await api('/api/entries/' + entryId + '/payment', {
+            method: 'PATCH',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ payment_status: newStatus })
+        });
     },
 
     async getEntryById(entryId) {
-        const { data: entry, error: entryError } = await supabaseClient
-            .from('grocery_entries')
-            .select('*')
-            .eq('id', entryId)
-            .single();
-        if (entryError) throw entryError;
-        const { data: items, error: itemsError } = await supabaseClient
-            .from('grocery_items')
-            .select('*')
-            .eq('entry_id', entryId);
-        if (itemsError) throw itemsError;
-        return { entry, items: items || [] };
+        return api('/api/entries/' + entryId);
     },
 
     async updateEntry(entryId, entryData, items) {
         var totalCost = Number(entryData.total_cost);
         if (!Number.isFinite(totalCost)) totalCost = 0;
-        const { error: upErr } = await supabaseClient
-            .from('grocery_entries')
-            .update({
-                entry_date: entryData.entry_date,
-                total_cost: totalCost,
-                item_count: entryData.item_count,
-                comment: entryData.comment || null,
-                updated_at: new Date().toISOString(),
-                bill_image_url: entryData.bill_image_url || null
-            })
-            .eq('id', entryId);
-        if (upErr) throw upErr;
-        await supabaseClient.from('grocery_items').delete().eq('entry_id', entryId);
-        const itemsToInsert = items.map(item => {
+        const itemsToInsert = items.map(function (item) {
             var qty = Number(item.quantity);
             var pricePerUnit = Number(item.price_per_unit);
             var totalPrice = Number(item.total_price);
             if (!Number.isFinite(totalPrice)) totalPrice = (Number.isFinite(qty) && Number.isFinite(pricePerUnit)) ? qty * pricePerUnit : 0;
             return {
-                entry_id: entryId,
-                item_name: item.name,
+                name: item.name,
                 quantity: Number.isFinite(qty) ? qty : 0,
                 unit: item.unit,
                 price_per_unit: Number.isFinite(pricePerUnit) ? pricePerUnit : 0,
@@ -463,22 +432,28 @@ const supabaseAdapter = {
                 memo_image_url: item.memo_image_url || null
             };
         });
-        if (itemsToInsert.length) {
-            const { error: insErr } = await supabaseClient.from('grocery_items').insert(itemsToInsert);
-            if (insErr) throw insErr;
-        }
+        await api('/api/entries/' + entryId, {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                entry_date: entryData.entry_date,
+                total_cost: totalCost,
+                item_count: entryData.item_count,
+                comment: entryData.comment || null,
+                bill_image_url: entryData.bill_image_url || null,
+                items: itemsToInsert
+            })
+        });
     },
 
     async deleteEntry(entryId) {
         const { entry } = await this.getEntryById(entryId);
         await addToEditLog(entry.id, entry.entry_date, Number(entry.total_cost) || 0, 0, 'Entry deleted');
-        await supabaseClient.from('grocery_items').delete().eq('entry_id', entryId);
-        const { error } = await supabaseClient.from('grocery_entries').delete().eq('id', entryId);
-        if (error) throw error;
+        await api('/api/entries/' + entryId, { method: 'DELETE' });
     }
 };
 
-const storage = USE_LOCAL_STORAGE ? localStorageAdapter : supabaseAdapter;
+const storage = USE_LOCAL_STORAGE ? localStorageAdapter : cloudflareAdapter;
 
 // ---------- Example data (seed when empty) ----------
 function seedExampleData() {
@@ -573,7 +548,7 @@ async function updateBalanceUI() {
     if (workerLabelEl) workerLabelEl.textContent = handLabel;
 }
 
-function openAddMoney() {
+async function openAddMoney() {
     const raw = prompt('কত টাকা দিয়েছেন? (সংখ্যা লিখুন)', '');
     if (raw === null || raw.trim() === '') return;
     const amount = parseFloat(raw.replace(/,/g, '').trim());
@@ -581,8 +556,8 @@ function openAddMoney() {
         alert('সঠিক সংখ্যা লিখুন');
         return;
     }
-    addMoney(amount);
-    updateBalanceUI();
+    await addMoney(amount);
+    await updateBalanceUI();
     alert('৳ ' + amount.toLocaleString('bn-BD') + ' যোগ হয়েছে।');
 }
 
@@ -654,15 +629,72 @@ async function renderBalanceStatementContent(filterValue) {
 
 
 // Set today's date as default
-document.addEventListener('DOMContentLoaded', function() {
-    const today = new Date().toISOString().split('T')[0];
-    document.getElementById('entry-date').value = today;
-    updateSummary();
-    if (USE_LOCAL_STORAGE) seedExampleData();
+async function ensureLogin() {
+    if (USE_LOCAL_STORAGE) return true;
+    const overlay = document.getElementById('login-overlay');
+    try {
+        const session = await api('/api/session');
+        if (session && session.ok) {
+            if (overlay) overlay.classList.remove('show');
+            return true;
+        }
+    } catch (e) { /* show the form */ }
+    if (overlay) overlay.classList.add('show');
+    return false;
+}
+
+async function submitLogin(event) {
+    event.preventDefault();
+    const errorEl = document.getElementById('login-error');
+    if (errorEl) errorEl.textContent = '';
+    try {
+        await api('/api/login', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                email: document.getElementById('login-email').value.trim(),
+                password: document.getElementById('login-password').value
+            })
+        });
+        await bootApp();
+    } catch (e) {
+        if (errorEl) errorEl.textContent = e.message || 'লগইন হয়নি';
+    }
+}
+
+async function logoutApp() {
+    await api('/api/logout', { method: 'POST' });
+    const overlay = document.getElementById('login-overlay');
+    if (overlay) overlay.classList.add('show');
+}
+
+async function bootApp() {
+    const ok = await ensureLogin();
+    if (!ok) return;
+    await refreshMoneyLog();
     loadAdminData();
     updateBalanceUI();
     loadWorkerDashboard();
     loadWorkerEntries();
+    loadLastEntryTab('worker');
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('entry-date').value = today;
+    updateSummary();
+    if (USE_LOCAL_STORAGE) {
+        seedExampleData();
+        loadAdminData();
+        updateBalanceUI();
+        loadWorkerDashboard();
+        loadWorkerEntries();
+        loadLastEntryTab('worker');
+        return;
+    }
+    const form = document.getElementById('login-form');
+    if (form) form.addEventListener('submit', submitLogin);
+    bootApp();
 });
 
 // Switch between views
@@ -1101,13 +1133,7 @@ async function previewEditMemoImage(fileInput) {
         return;
     }
     try {
-        var ext = (file.name || '').split('.').pop() || 'jpg';
-        var rowIndex = Array.prototype.indexOf.call(row.parentElement.children, row);
-        var path = editEntryId + '/edit_' + rowIndex + '_' + Date.now() + '.' + ext;
-        var up = await supabaseClient.storage.from(MEMO_BUCKET).upload(path, file, { upsert: true });
-        if (up.error) throw up.error;
-        var urlData = supabaseClient.storage.from(MEMO_BUCKET).getPublicUrl(path);
-        var publicUrl = urlData.data.publicUrl;
+        var publicUrl = await uploadImage(file);
         urlInput.value = publicUrl;
         preview.src = publicUrl;
         preview.style.display = 'inline-block';
